@@ -10,7 +10,6 @@ COPY . .
 
 # Establecer variables de entorno
 ENV FLASK_APP=app.py
-ENV GOOGLE_SESSION_TOKEN="tu_token_de_sesion_aqui_o_pasarlo_en_dockploy"
 # Considera usar un .env para el token localmente, y para Dockploy inyectarlo como secreto o variable de entorno
 
 EXPOSE 5000
