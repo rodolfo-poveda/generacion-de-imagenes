@@ -1,0 +1,17 @@
+# Entorno virtual de Python
+venv/
+/venv/
+
+# Archivos de caché de Python
+__pycache__/
+*.pyc
+
+# Configuraciones de VSCode
+.vscode/
+
+# Datos de sesión y salida
+flask_session_data/
+output/
+
+# Archivo de variables de entorno
+.env

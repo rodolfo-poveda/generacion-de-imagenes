@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Generator Pro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Aquí puedes añadir favicons si lo deseas -->
+</head>
+<body
+    data-initial-session-state='{
+        "active_tab": "{{ active_tab }}",
+        "results": {{ results | tojson }},
+        "reference_images_list": {{ reference_images_list | tojson }},
+        "aspect_ratio_index": {{ aspect_ratio_index }},
+        "save_images": {{ 'true' if save_images else 'false' }}
+    }'
+    data-model-display-names='{{ MODEL_DISPLAY_NAMES | tojson }}'
+    data-model-names-list='{{ MODEL_NAMES_LIST | tojson }}'
+>
+    <div class="sidebar">
+        <h1>🎨 AI Image Generator Pro</h1>
+        <p>Genera imágenes de alta calidad a partir de texto o imágenes de referencia.</p>
+
+        <hr>
+
+        <h3>🤖 Modelo de IA</h3>
+        <div class="radio-group">
+            {% for model_name in model_names_list %}
+            <input type="radio" id="model_{{ loop.index }}" name="model_name_display" value="{{ model_name }}" {% if model_name == active_tab %}checked{% endif %} onchange="window.handleTabChange(this.value)">
+            <label for="model_{{ loop.index }}">{{ model_name }}</label>
+            {% endfor %}
+        </div>
+
+        <hr>
+
+        <h3>✍️ Descripción</h3>
+        <textarea id="prompt-textarea" rows="6" placeholder="Ej: Un astronauta montando a caballo en Marte..."></textarea>
+
+        <h3>🖼️ Cantidad de Imágenes</h3>
+        <div class="slider-container">
+            <input type="range" id="num-images-slider" min="1" max="4" value="4">
+            <span id="num-images-value">4</span>
+        </div>
+
+        <div class="expander">
+            <div class="expander-header" onclick="window.toggleExpander(this)">
+                <span>⚙️ Ajustes Avanzados</span>
+                <span>▼</span>
+            </div>
+            <div class="expander-content">
+                <label for="seed-input">🎲 Semilla</label>
+                <input type="number" id="seed-input" value="-1" min="-1" max="999999" step="1" help="Usa -1 para una semilla aleatoria.">
+
+                <label for="aspect-ratio-select">📐 Relación de Aspecto</label>
+                <select id="aspect-ratio-select">
+                    {% set all_ratios = ["16:9", "9:16", "1:1", "4:3", "3:4"] %}
+                    {% set model_type = MODEL_DISPLAY_NAMES[active_tab] %}
+                    {% set available_ratios = ["16:9", "9:16", "1:1"] if model_type == "R2I" else all_ratios %}
+                    {% set current_selected_ratio = all_ratios[aspect_ratio_index] %}
+                    {% set default_ratio_index = 0 %}
+                    {% if current_selected_ratio in available_ratios %}
+                        {% set default_ratio_index = available_ratios.index(current_selected_ratio) %}
+                    {% else %}
+                        {% set default_ratio_index = available_ratios.index(available_ratios[0]) %}
+                    {% endif %}
+
+                    {% for ratio in available_ratios %}
+                    <option value="{{ ratio }}" {% if loop.index0 == default_ratio_index %}selected{% endif %}>{{ ratio }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <label class="checkbox-container">
+            <input type="checkbox" id="save_images_checkbox" {% if save_images %}checked{% endif %}>
+            💾 Guardar imágenes generadas
+            <span class="checkmark"></span>
+        </label>
+
+        <hr>
+
+        {% set model_type = MODEL_DISPLAY_NAMES[active_tab] %}
+        {% if model_type in ["R2I", "GEM_PIX"] %}
+        <div id="reference-images-section">
+            <h4>🖼️ Imágenes de Referencia</h4>
+            <div id="reference-images-container" class="reference-images-grid">
+                <!-- Las imágenes de referencia se cargarán aquí con JS -->
+            </div>
+            <div id="reference-uploader-section">
+                 <label for="reference-file-uploader" class="file-uploader-label">
+                     Sube hasta <span id="available-slots">3</span> imágenes
+                 </label>
+                 <input type="file" id="reference-file-uploader" accept="image/jpeg, image/png" multiple style="display: none;">
+            </div>
+        </div>
+        {% endif %}
+
+        <button id="generate-button" type="submit" class="primary-button">🚀 Generar Imágenes</button>
+        {# ELIMINAR ESTOS DIVS DEL SIDEBAR #}
+        {# <div id="loading-spinner" class="loading-spinner">✨ Creando tu obra maestra...</div> #}
+        {# <div id="error-message" class="error-message" style="display: none;"></div> #}
+        {# <div id="success-message" class="info-message" style="display: none;"></div> #}
+    </div>
+
+    <div class="content-wrapper">
+        <div class="main-content">
+            <h2 id="main-results-title">🎨 Tus Creaciones</h2>
+            <div id="results-container" class="results-grid">
+                <!-- El contenido inicial se cargará aquí con JavaScript, ahora desde la sesión del servidor -->
+            </div>
+            <button id="clear-results-button" class="secondary-button" style="display:none; margin-top: 1rem; width: auto; padding: 0.6rem 1.25rem;">🗑️ Limpiar Resultados</button>
+
+            {# MOVER ESTOS DIVS AL main-content #}
+            <div id="loading-spinner" class="loading-spinner">✨ Creando tu obra maestra...</div>
+            <div id="error-message" class="error-message" style="display: none;"></div>
+            <div id="success-message" class="info-message" style="display: none;"></div>
+        </div>
+
+        <footer>
+            <p>AI Image Generator Pro © 2025</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    <!-- MODAL PARA AMPLIAR IMÁGENES -->
+    <div id="image-modal" class="image-modal">
+        <span class="close-modal" onclick="window.closeImageModal()">&times;</span>
+        <div class="image-modal-content">
+            <img id="modal-image" src="" alt="Imagen Ampliada">
+        </div>
+    </div>
+
+</body>
+</html>
