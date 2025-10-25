@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalImage = document.getElementById('modal-image');
 
     if (!generateButton || !resultsContainer) {
-        console.error("Error: Elemento(s) crítico(s) no encontrado(s) en el DOM. La aplicación no puede funcionar correctamente.");
+        //console.error("Error: Elemento(s) crítico(s) no encontrado(s) en el DOM. La aplicación no puede funcionar correctamente.");
         return;
     }
 
@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.handleTabChange = async function(selectedModelDisplay) {
         if (activeModelDisplayName === selectedModelDisplay) {
-            console.log("DEBUG: Already on selected tab, no action needed.");
+            //console.log("DEBUG: Already on selected tab, no action needed.");
             return;
         }
 
@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             showMessage(errorMessage, 'Error al cambiar de modelo. Inténtalo de nuevo.');
-            console.error('Fetch error on tab change:', error);
+            //console.error('Fetch error on tab change:', error);
         } finally {
             if (loadingSpinner) loadingSpinner.style.display = 'none';
         }
@@ -174,27 +174,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 }),
             });
 
-            console.log("--- DEBUG (CLIENT): Raw response status and text from /generate endpoint ---");
-            console.log("  HTTP Status Code:", response.status);
+            //console.log("--- DEBUG (CLIENT): Raw response status and text from /generate endpoint ---");
+            //console.log("  HTTP Status Code:", response.status);
             const responseText = await response.text(); 
-            console.log("  Raw Response Body (first 500 chars):", responseText.substring(0, 500) + "...");
+            //console.log("  Raw Response Body (first 500 chars):", responseText.substring(0, 500) + "...");
             
             let result;
             try {
                 result = JSON.parse(responseText); 
             } catch (jsonError) {
-                console.error("--- DEBUG (CLIENT): JSON parsing error:", jsonError);
-                console.error("--- DEBUG (CLIENT): Full raw response body:", responseText); 
+                //console.error("--- DEBUG (CLIENT): JSON parsing error:", jsonError);
+                //console.error("--- DEBUG (CLIENT): Full raw response body:", responseText); 
                 throw new Error("Failed to parse JSON response from server."); 
             }
 
-            console.log("--- DEBUG (CLIENT): Parsed JSON result ---");
-            console.log("  Status from Flask:", result.status);
-            console.log("  Message from Flask:", result.message);
+            //console.log("--- DEBUG (CLIENT): Parsed JSON result ---");
+            //console.log("  Status from Flask:", result.status);
+            //console.log("  Message from Flask:", result.message);
             if (result.images) {
-                console.log("  Number of images received from Flask:", result.images.length);
+                //console.log("  Number of images received from Flask:", result.images.length);
                 if (result.images.length > 0) {
-                    console.log("  First image data (partial):", result.images[0].substring(0, 100) + "...");
+                    //console.log("  First image data (partial):", result.images[0].substring(0, 100) + "...");
                 }
             }
 
@@ -210,7 +210,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateFooterSaveMessage(false);
             }
         } catch (error) {
-            console.error("--- DEBUG (CLIENT): Fetch error on /generate:", error);
+            //console.error("--- DEBUG (CLIENT): Fetch error on /generate:", error);
             showMessage(errorMessage, 'Error de conexión con el servidor. Inténtalo de nuevo.');
             showInitialMessage();
             updateFooterSaveMessage(false);
@@ -226,12 +226,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mainResultsTitle) mainResultsTitle.textContent = '🎨 Tus Creaciones';
 
         if (images.length === 0) {
-            console.warn("--- DEBUG (CLIENT): renderGeneratedImages: No images to render, showing initial message. ---");
+            //console.warn("--- DEBUG (CLIENT): renderGeneratedImages: No images to render, showing initial message. ---");
             showInitialMessage();
             if (clearResultsButton) clearResultsButton.style.display = 'none';
             return;
         }
-        console.log("--- DEBUG (CLIENT): renderGeneratedImages: Rendering", images.length, "images. ---");
+        //console.log("--- DEBUG (CLIENT): renderGeneratedImages: Rendering", images.length, "images. ---");
 
         resultsContainer.classList.remove('cols-1', 'cols-2', 'cols-3', 'cols-4');
         if (images.length === 1) {
@@ -271,7 +271,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (!img_data_url || !img_data_url.startsWith('data:image/')) {
-                console.error(`--- DEBUG (CLIENT): Image ${index} has invalid data URL:`, img_data_url ? img_data_url.substring(0, 100) + "..." : "empty/null");
+                //console.error(`--- DEBUG (CLIENT): Image ${index} has invalid data URL:`, img_data_url ? img_data_url.substring(0, 100) + "..." : "empty/null");
                 card.innerHTML = `<div style="color:red; text-align:center; padding:1rem;">Error: Imagen generada inválida o corrupta.</div>`;
             } else {
                  card.innerHTML = `
@@ -315,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     showMessage(errorMessage, data.message || "Error al limpiar resultados en el servidor.");
                 }
             } catch (error) {
-                console.error("Error calling /clear_session_results:", error);
+                //console.error("Error calling /clear_session_results:", error);
                 showMessage(errorMessage, "Error de conexión al limpiar resultados.");
             }
         });
@@ -386,7 +386,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             showMessage(errorMessage, `Error al actualizar referencias: ${error.message}`);
-            console.error('Fetch error:', error);
+            //console.error('Fetch error:', error);
             return false;
         }
     }
@@ -492,7 +492,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateFooterSaveMessage(window.initialSessionState.results && window.initialSessionState.results.length > 0);
             } catch (error) {
                 showMessage(errorMessage, 'Error al actualizar configuración de guardado.');
-                console.error('Fetch error:', error);
+                //console.error('Fetch error:', error);
             }
         });
     }
