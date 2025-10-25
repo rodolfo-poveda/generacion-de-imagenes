@@ -15,4 +15,4 @@ ENV FLASK_APP=app.py
 EXPOSE 5000
 
 # Comando para ejecutar la aplicación con Gunicorn (más robusto que flask run)
-CMD ["gunicorn", "--workers", "3", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
