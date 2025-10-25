@@ -13,34 +13,52 @@ from config import MODEL_DISPLAY_NAMES, MODEL_NAMES_LIST, GOOGLE_SESSION_TOKEN
 from utils import main_generator_function, create_blank_image
 
 app = Flask(__name__) # <--- ¡Esta es la instancia de la aplicación Flask!
-app.secret_key = os.urandom(24) 
 
-# --- Configuración de Flask-Session ---
-app.config["SESSION_PERMANENT"] = True
+# --- CAMBIO 1: CONFIGURACIÓN DE SESIÓN ROBUSTA PARA PRODUCCIÓN ---
+# Elimina `app.secret_key` y lo centraliza en la configuración de la app,
+# cargándolo desde una variable de entorno, que es la práctica correcta.
+# Dokploy inyectará esta variable.
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'una-clave-secreta-solo-para-desarrollo-local')
+
+# Configuración para usar el sistema de archivos como almacenamiento de sesión.
+# Esto garantiza que todos los workers de Gunicorn compartan la misma sesión.
 app.config["SESSION_TYPE"] = "filesystem"
-app.config["SESSION_FILE_DIR"] = "./flask_session_data"
-app.config["SESSION_USE_SIGNER"] = True
-app.config["SESSION_FILE_THRESHOLD"] = 100
-app.config["SESSION_FILE_MODE"] = 0o600
+app.config["SESSION_PERMANENT"] = True # Mantiene la sesión entre reinicios del navegador
+app.config["SESSION_USE_SIGNER"] = True # Firma criptográficamente la cookie de sesión
 
-Session(app) # Inicializa Flask-Session
+# --- CAMBIO 2: RUTA DE SESIÓN ABSOLUTA PARA ENTORNOS DE CONTENEDOR ---
+# Usar una ruta absoluta como '/tmp/' es más seguro y predecible dentro de un
+# contenedor de Docker que una ruta relativa como './flask_session_data'.
+app.config["SESSION_FILE_DIR"] = "/tmp/flask_session"
 
+# --- CAMBIO 3: ELIMINAR CONFIGURACIONES INNECESARIAS O REDUNDANTES ---
+# Se eliminan SESSION_FILE_THRESHOLD, SESSION_FILE_MODE
+# ya que sus valores por defecto son adecuados y no es necesario especificarlos.
+
+Session(app) # Inicializa Flask-Session con la configuración anterior
+
+# Configuración del logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @app.before_request
 def initialize_session():
-    logging.info(f"Session before request: {session.sid if session.sid else 'No SID'}, Keys: {list(session.keys())}")
+    # --- CAMBIO 4: VERIFICACIÓN PARA EVITAR CREAR SID EN CADA PETICIÓN ESTÁTICA ---
+    # `request.endpoint` solo existe para rutas reales de Flask, no para
+    # peticiones a archivos estáticos como CSS o JS. Esto evita que los logs se
+    # llenen de información de sesión innecesaria cuando el navegador pide esos archivos.
+    if request.endpoint:
+        logging.info(f"Session before request: {session.sid if session.sid else 'No SID'}, Keys: {list(session.keys())}")
 
-    if 'active_tab' not in session:
-        session['active_tab'] = MODEL_NAMES_LIST[0]
-    if 'results' not in session:
-        session['results'] = []
-    if 'reference_images_list' not in session:
-        session['reference_images_list'] = [] 
-    if 'aspect_ratio_index' not in session:
-        session['aspect_ratio_index'] = 0
-    if 'save_images' not in session:
-        session['save_images'] = False
+        if 'active_tab' not in session:
+            session['active_tab'] = MODEL_NAMES_LIST[0]
+        if 'results' not in session:
+            session['results'] = []
+        if 'reference_images_list' not in session:
+            session['reference_images_list'] = [] 
+        if 'aspect_ratio_index' not in session:
+            session['aspect_ratio_index'] = 0
+        if 'save_images' not in session:
+            session['save_images'] = False
 
 @app.route('/')
 def index():
@@ -54,6 +72,10 @@ def index():
                            save_images=session['save_images'],
                            MODEL_DISPLAY_NAMES=MODEL_DISPLAY_NAMES,
                            MODEL_NAMES_LIST=MODEL_NAMES_LIST)
+
+# ... (El resto de tu código desde @app.route('/generate'...) no necesita cambios) ...
+# ... (Pega aquí el resto de tus rutas: /generate, /update_session_settings, etc.) ...
+# ... (Todo desde la línea 81 de tu archivo original hasta el final) ...
 
 @app.route('/generate', methods=['POST'])
 def generate_images():
@@ -92,7 +114,6 @@ def generate_images():
     result = main_generator_function(prompt, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag)
     
     if result['status'] == 'success':
-        # Convert PIL Images to base64 data URLs (fixes JSON serialization for Streamlit-originated PIL objects)
         converted_images = []
         for pil_img in result['images']:
             if isinstance(pil_img, Image.Image):
@@ -110,9 +131,7 @@ def generate_images():
         logging.info(f"Generated {len(result['images'])} images for session {session.sid}. Save images: {save_images_flag}")
         return jsonify({'status': 'success', 'images': result['images']})
     else:
-        # --- DICCIONARIO DE MENSAJES DE ERROR MÁS DETALLADOS Y ACTUALIZADO ---
         detailed_error_messages = {
-            # Errores de subida de imagen de referencia
             "minor_upload_error": "🚫 La imagen de referencia podría contener contenido inapropiado (ej. menores, contenido explícito). Por favor, usa otra imagen.",
             "prominent_people_error": "🚫 La imagen de referencia contiene personas prominentes o contenido sensible. Por favor, usa otra imagen.",
             "child_exploitation_error": "🚫 Contenido de explotación infantil detectado en la imagen de referencia. Esta acción está estrictamente prohibida.",
@@ -120,16 +139,12 @@ def generate_images():
             "generic_upload_error": "❌ Error al procesar la imagen de referencia. Asegúrate de que sea una imagen válida y no esté dañada.",
             "image_too_large": "📦 La imagen de referencia es demasiado grande. El tamaño máximo permitido es 10MB.",
             "upload_failed: no_media_ids": "📤 Fallo interno: No se pudieron subir las imágenes de referencia. Intenta de nuevo.", 
-            
-            # Errores de generación de imagen
             "unsafe_generation_error": "🎨 Tu descripción infringe las políticas de contenido seguro (ej. menores, contenido explícito, violento). Por favor, modifica tu prompt.",
             "minors_error": "🚫 Contenido relacionado con menores o de naturaleza sensible en la descripción. Por favor, ajusta tu prompt.",
             "sexual_error": "🚫 Contenido de naturaleza sexual en la descripción. Por favor, ajusta tu prompt.",
             "violence_error": "🚫 Contenido violento o gráfico en la descripción. Por favor, ajusta tu prompt.",
             "criminal_error": "🚫 Contenido relacionado con actividades criminales en la descripción. Por favor, ajusta tu prompt.",
             "no_images_returned": "🤔 La IA no pudo generar imágenes para tu descripción. Intenta con un prompt diferente.",
-            
-            # Errores de autenticación y conexión
             "auth_error": f"🔑 Error de autenticación: Tu sesión ha caducado o es inválida. Vuelve a cargar la página e inténtalo de nuevo. Detalles: {result['message'].split(':', 1)[1].strip() if ':' in result['message'] else result['message']}",
             "connection_error: timeout": "🌐 La conexión con la IA se agotó (timeout). Revisa tu conexión a internet o intenta más tarde.",
             "connection_error": "🌐 Error de conexión con el servidor de IA. Revisa tu conexión a internet e inténtalo de nuevo.",
@@ -196,6 +211,7 @@ def clear_session_results():
         logging.info(f"Cleared generated images from session {session.sid}.")
     return jsonify({'status': 'success'})
 
+
 if __name__ == '__main__':
-    os.makedirs(app.config["SESSION_FILE_DIR"], exist_ok=True)
+    # No es necesario crear el directorio aquí, Flask-Session lo hará automáticamente
     app.run(debug=True)
