@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const seedInput = document.getElementById('seed-input');
     const aspectRatioSelect = document.getElementById('aspect-ratio-select');
     const saveImagesCheckbox = document.getElementById('save_images_checkbox');
+    const improvePromptButton = document.getElementById('improve-prompt-button');
     const loadingSpinner = document.getElementById('loading-spinner');
     const errorMessage = document.getElementById('error-message');
     const successMessage = document.getElementById('success-message');
@@ -126,6 +127,121 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    // Nuevo handler para el botón de mejorar prompt
+    if (improvePromptButton) {
+        improvePromptButton.addEventListener('click', async function(event) {
+            event.preventDefault();
+            const prompt = promptTextarea ? promptTextarea.value.trim() : '';
+            if (!prompt) {
+                showMessage(errorMessage, "⚠️ Escribe un prompt para mejorar.");
+                return;
+            }
+            hideMessages();
+            improvePromptButton.disabled = true;
+            improvePromptButton.textContent = '🧠 Mejorando...';
+            try {
+                const response = await fetch('/improve_prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    promptTextarea.value = data.improved_prompt;
+                    showMessage(successMessage, '🎉 Prompt mejorado y actualizado.', 'success');
+                } else {
+                    showMessage(errorMessage, data.message);
+                }
+            } catch (error) {
+                showMessage(errorMessage, '❌ Error de conexión al mejorar prompt. Inténtalo de nuevo.');
+                //console.error('Fetch error on improve_prompt:', error);
+            } finally {
+                improvePromptButton.disabled = false;
+                improvePromptButton.textContent = '🧠 Mejorar Prompt con Gemini';
+            }
+        });
+    }
+
+    const magicPromptButton = document.getElementById('magic-prompt-button');
+    if (magicPromptButton) {
+        magicPromptButton.addEventListener('click', async function(event) {
+            event.preventDefault();
+            hideMessages();
+            magicPromptButton.disabled = true;
+            magicPromptButton.textContent = '✨ Generando...';
+            try {
+                const response = await fetch('/generate_magic_prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    promptTextarea.value = data.magic_prompt;
+                    showMessage(successMessage, '🎉 ¡Prompt mágico generado y listo para usar!', 'success');
+                } else {
+                    showMessage(errorMessage, data.message);
+                }
+            } catch (error) {
+                showMessage(errorMessage, '❌ Error de conexión al generar prompt mágico. Inténtalo de nuevo.');
+                //console.error('Fetch error on magic_prompt:', error);
+            } finally {
+                magicPromptButton.disabled = false;
+                magicPromptButton.textContent = '✨ Prompt Mágico';
+            }
+        });
+    } 
+
+    // Función para generar imágenes (extraída para reutilizar en inicial)
+    async function performGenerate(prompt, num_images, seed, aspect_ratio, model_name_display, save_images, reference_images) {
+        try {
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: prompt,
+                    num_images: num_images,
+                    seed: seed,
+                    aspect_ratio: aspect_ratio,
+                    model_name_display: model_name_display,
+                    save_images: save_images,
+                    reference_images: reference_images
+                }),
+            });
+
+            const responseText = await response.text(); 
+            
+            let result;
+            try {
+                result = JSON.parse(responseText); 
+            } catch (jsonError) {
+                throw new Error("Failed to parse JSON response from server."); 
+            }
+
+            if (response.ok && result.status === 'success') {
+                window.initialSessionState.results = result.images; 
+                renderGeneratedImages(result.images); 
+                showMessage(successMessage, `🎉 ¡${result.images.length} imagen(es) generada(s)!`, 'success');
+                window.initialSessionState.save_images = save_images; 
+                updateFooterSaveMessage(result.images.length > 0);
+                if (clearResultsButton) clearResultsButton.style.display = 'block';
+                return true;
+            } else {
+                showMessage(errorMessage, result.message || 'Error desconocido al generar imágenes.');
+                showInitialMessage();
+                updateFooterSaveMessage(false);
+                if (clearResultsButton) clearResultsButton.style.display = 'none';
+                return false;
+            }
+        } catch (error) {
+            showMessage(errorMessage, 'Error de conexión con el servidor. Inténtalo de nuevo.');
+            showInitialMessage();
+            updateFooterSaveMessage(false);
+            if (clearResultsButton) clearResultsButton.style.display = 'none';
+            return false;
+        }
+    }
+
     generateButton.addEventListener('click', async function(event) {
         event.preventDefault();
 
@@ -159,65 +275,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        try {
-            const response = await fetch('/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: prompt,
-                    num_images: num_images,
-                    seed: seed,
-                    aspect_ratio: aspect_ratio,
-                    model_name_display: model_name_display,
-                    save_images: save_images,
-                    reference_images: currentReferenceImages
-                }),
-            });
+        await performGenerate(prompt, num_images, seed, aspect_ratio, model_name_display, save_images, currentReferenceImages);
 
-            //console.log("--- DEBUG (CLIENT): Raw response status and text from /generate endpoint ---");
-            //console.log("  HTTP Status Code:", response.status);
-            const responseText = await response.text(); 
-            //console.log("  Raw Response Body (first 500 chars):", responseText.substring(0, 500) + "...");
-            
-            let result;
-            try {
-                result = JSON.parse(responseText); 
-            } catch (jsonError) {
-                //console.error("--- DEBUG (CLIENT): JSON parsing error:", jsonError);
-                //console.error("--- DEBUG (CLIENT): Full raw response body:", responseText); 
-                throw new Error("Failed to parse JSON response from server."); 
-            }
-
-            //console.log("--- DEBUG (CLIENT): Parsed JSON result ---");
-            //console.log("  Status from Flask:", result.status);
-            //console.log("  Message from Flask:", result.message);
-            if (result.images) {
-                //console.log("  Number of images received from Flask:", result.images.length);
-                if (result.images.length > 0) {
-                    //console.log("  First image data (partial):", result.images[0].substring(0, 100) + "...");
-                }
-            }
-
-            if (response.ok && result.status === 'success') {
-                window.initialSessionState.results = result.images; 
-                renderGeneratedImages(result.images); 
-                showMessage(successMessage, `🎉 ¡${result.images.length} imagen(es) generada(s)!`, 'success');
-                window.initialSessionState.save_images = save_images; 
-                updateFooterSaveMessage(result.images.length > 0);
-            } else {
-                showMessage(errorMessage, result.message || 'Error desconocido al generar imágenes.');
-                showInitialMessage();
-                updateFooterSaveMessage(false);
-            }
-        } catch (error) {
-            //console.error("--- DEBUG (CLIENT): Fetch error on /generate:", error);
-            showMessage(errorMessage, 'Error de conexión con el servidor. Inténtalo de nuevo.');
-            showInitialMessage();
-            updateFooterSaveMessage(false);
-        } finally {
-            // Ocultar el spinner al finalizar
-            if (loadingSpinner) loadingSpinner.style.display = 'none';
-        }
+        // Ocultar el spinner al finalizar
+        if (loadingSpinner) loadingSpinner.style.display = 'none';
     });
 
     function renderGeneratedImages(images) {
@@ -307,16 +368,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await response.json();
                 if (data.status === 'success') {
                     window.initialSessionState.results = []; 
+                    // Resetear elementos UI después del clear
+                    if (aspectRatioSelect) aspectRatioSelect.selectedIndex = 0;
+                    if (saveImagesCheckbox) saveImagesCheckbox.checked = false;
+                    currentReferenceImages = [];
+                    renderReferenceImages();
                     showInitialMessage();
+                    if (promptTextarea) promptTextarea.value = '';  // <-- NUEVO: Limpia el textarea
                     updateFooterSaveMessage(false);
                     if (clearResultsButton) clearResultsButton.style.display = 'none';
-                    showMessage(successMessage, "Resultados limpiados.", 'success');
+                    showMessage(successMessage, "Interfaz reseteada completamente.", 'success');
                 } else {
-                    showMessage(errorMessage, data.message || "Error al limpiar resultados en el servidor.");
+                    showMessage(errorMessage, data.message || "Error al resetear interfaz en el servidor.");
                 }
             } catch (error) {
                 //console.error("Error calling /clear_session_results:", error);
-                showMessage(errorMessage, "Error de conexión al limpiar resultados.");
+                showMessage(errorMessage, "Error de conexión al resetear interfaz.");
             }
         });
     }
@@ -530,15 +597,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-
     function initializeUI() {
         renderReferenceImages();
         
         if (window.initialSessionState.results && window.initialSessionState.results.length > 0) {
             renderGeneratedImages(window.initialSessionState.results);
             updateFooterSaveMessage(true); 
+            if (clearResultsButton) clearResultsButton.style.display = 'block';
         } else {
-            showInitialMessage();
+            showInitialMessage();  // Muestra mensaje por defecto sin generar nada
+            if (clearResultsButton) clearResultsButton.style.display = 'none';
         }
     }
 

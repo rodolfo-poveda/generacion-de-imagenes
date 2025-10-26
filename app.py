@@ -3,14 +3,15 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from flask_session import Session # <--- ¡Importante!
 import os
 import io
+import random
 from PIL import Image
 import base64
 import logging
-
+import google.generativeai as genai
 # Importa estas variables de config.py
-from config import MODEL_DISPLAY_NAMES, MODEL_NAMES_LIST, GOOGLE_SESSION_TOKEN
+from config import MODEL_DISPLAY_NAMES, MODEL_NAMES_LIST, GOOGLE_SESSION_TOKEN, GEMINI_API_KEY
 # Importa las funciones de utilidad de utils.py
-from utils import main_generator_function, create_blank_image
+from utils import main_generator_function, create_blank_image, improve_prompt_with_gemini, translate_to_english
 
 app = Flask(__name__) # <--- ¡Esta es la instancia de la aplicación Flask!
 
@@ -23,7 +24,7 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'una-clave-secreta-solo-para-
 # Configuración para usar el sistema de archivos como almacenamiento de sesión.
 # Esto garantiza que todos los workers de Gunicorn compartan la misma sesión.
 app.config["SESSION_TYPE"] = "filesystem"
-app.config["SESSION_PERMANENT"] = True # Mantiene la sesión entre reinicios del navegador
+app.config["SESSION_PERMANENT"] = False # Mantiene la sesión entre reinicios del navegador
 app.config["SESSION_USE_SIGNER"] = True # Firma criptográficamente la cookie de sesión
 
 # --- CAMBIO 2: RUTA DE SESIÓN ABSOLUTA PARA ENTORNOS DE CONTENEDOR ---
@@ -49,16 +50,16 @@ def initialize_session():
     if request.endpoint:
         logging.info(f"Session before request: {session.sid if session.sid else 'No SID'}, Keys: {list(session.keys())}")
 
+        # Siempre limpiar resultados y referencias para evitar carga de sesiones previas
+        session['results'] = []
+        session['reference_images_list'] = []
+        session['save_images'] = False
+
+        # Solo inicializar defaults si no existen (para active_tab y aspect_ratio)
         if 'active_tab' not in session:
             session['active_tab'] = MODEL_NAMES_LIST[0]
-        if 'results' not in session:
-            session['results'] = []
-        if 'reference_images_list' not in session:
-            session['reference_images_list'] = [] 
         if 'aspect_ratio_index' not in session:
             session['aspect_ratio_index'] = 0
-        if 'save_images' not in session:
-            session['save_images'] = False
 
 @app.route('/')
 def index():
@@ -73,9 +74,35 @@ def index():
                            MODEL_DISPLAY_NAMES=MODEL_DISPLAY_NAMES,
                            MODEL_NAMES_LIST=MODEL_NAMES_LIST)
 
-# ... (El resto de tu código desde @app.route('/generate'...) no necesita cambios) ...
-# ... (Pega aquí el resto de tus rutas: /generate, /update_session_settings, etc.) ...
-# ... (Todo desde la línea 81 de tu archivo original hasta el final) ...
+@app.route('/improve_prompt', methods=['POST'])
+def improve_prompt():
+    data = request.json
+    prompt = data.get('prompt', '').strip()
+    if not prompt:
+        return jsonify({'status': 'error', 'message': '⚠️ Escribe un prompt para mejorar.'}), 400
+    
+    try:
+        improved_prompt = improve_prompt_with_gemini(prompt)
+        logging.info(f"Prompt mejorado para sesión {session.sid}: '{improved_prompt[:100]}...'")
+        return jsonify({'status': 'success', 'improved_prompt': improved_prompt})
+    except Exception as e:
+        logging.error(f"Error en improve_prompt para sesión {session.sid}: {e}")
+        return jsonify({'status': 'error', 'message': f'❌ Error al mejorar prompt: {str(e)}. Usando el original.'}), 500
+
+@app.route('/generate_magic_prompt', methods=['POST'])
+def generate_magic_prompt():
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content("Genera UN SOLO prompt corto (20-40 palabras) y aleatorio para generación de imágenes con IA. En español, estilo fotorealista/descriptivo con escenas vívidas similares a estos ejemplos: 'Foto de un gato flotando en el espacio con traje de astronauta, con la Tierra de fondo' o 'Retrato fotorrealista de una mujer con pendientes elaborados iluminada frontalmente, retrato de cuerpo completo, hiperrealista'. Incluye detalles sensoriales y narrativos, pero manténlo conciso. Responde SOLO con el prompt, sin explicaciones.")
+        magic_prompt_es = response.text.strip()
+        logging.info(f"Prompt mágico generado (ES) para sesión {session.sid}: '{magic_prompt_es[:100]}...'")
+        if not magic_prompt_es:
+            return jsonify({'status': 'error', 'message': '❌ Error al generar prompt. Inténtalo de nuevo.'}), 500
+        return jsonify({'status': 'success', 'magic_prompt': magic_prompt_es})
+    except Exception as e:
+        logging.error(f"Error en generate_magic_prompt para sesión {session.sid}: {e}")
+        return jsonify({'status': 'error', 'message': f'❌ Error al generar prompt mágico: {str(e)}.'}), 500    
 
 @app.route('/generate', methods=['POST'])
 def generate_images():
@@ -92,6 +119,17 @@ def generate_images():
 
     if not prompt.strip():
         return jsonify({'status': 'error', 'message': '⚠️ Por favor, escribe una descripción.'}), 400
+
+    # Log extra para debug de key
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    if gemini_key:
+        logging.info(f"GEMINI_API_KEY encontrada para traducción (primeros 10 chars: {gemini_key[:10]}...)")
+    else:
+        logging.warning("GEMINI_API_KEY NO encontrada - traducción fallará, usando prompt original.")
+
+    # Traducir prompt a inglés para el modelo (mantener original en logs/español para frontend)
+    prompt_english = translate_to_english(prompt)
+    logging.info(f"Prompt original (ES): '{prompt[:100]}...' → Traducido (EN): '{prompt_english[:100]}...'")
 
     is_ref_model = model_type in ["R2I", "GEM_PIX"]
     refs_provided = bool(ref_images_data_urls)
@@ -111,7 +149,7 @@ def generate_images():
     if not GOOGLE_SESSION_TOKEN:
          return jsonify({'status': 'error', 'message': 'auth_error: GOOGLE_SESSION_TOKEN no configurado en el servidor.'}), 500
 
-    result = main_generator_function(prompt, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag)
+    result = main_generator_function(prompt_english, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag)
     
     if result['status'] == 'success':
         converted_images = []
@@ -208,7 +246,11 @@ def remove_reference_image(index):
 def clear_session_results():
     if 'results' in session:
         session['results'] = []
-        logging.info(f"Cleared generated images from session {session.sid}.")
+        session['reference_images_list'] = []
+        session['save_images'] = False
+        session['aspect_ratio_index'] = 0
+        session.clear()  # Limpia toda la sesión para no guardar previas
+        logging.info(f"Reset complete for session {session.sid}: cleared results, references, save_images, and aspect_ratio_index.")
     return jsonify({'status': 'success'})
 
 

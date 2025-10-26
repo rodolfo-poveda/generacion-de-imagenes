@@ -4,3 +4,4 @@ requests
 Pillow
 gunicorn
 Flask-Session # <--- ¡Nuevo!
+google.generativeai

@@ -37,6 +37,11 @@
         <h3>✍️ Descripción</h3>
         <textarea id="prompt-textarea" rows="6" placeholder="Ej: Un astronauta montando a caballo en Marte..."></textarea>
 
+        <div class="button-row" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+            <button id="improve-prompt-button" class="secondary-button" style="width: 50%;">🧠 Mejorar Prompt con IA</button>
+            <button id="magic-prompt-button" class="secondary-button" style="width: 50%;">✨ Prompt Mágico</button>
+        </div>
+
         <h3>🖼️ Cantidad de Imágenes</h3>
         <div class="slider-container">
             <input type="range" id="num-images-slider" min="1" max="4" value="4">
@@ -97,6 +102,7 @@
         {% endif %}
 
         <button id="generate-button" type="submit" class="primary-button">🚀 Generar Imágenes</button>
+        <button id="clear-results-button" class="secondary-button" style="display:none; margin-top: 1rem; width: 100%; padding: 0.6rem 1.25rem;">🗑️ Resetear Interfaz</button>
         {# ELIMINAR ESTOS DIVS DEL SIDEBAR #}
         {# <div id="loading-spinner" class="loading-spinner">✨ Creando tu obra maestra...</div> #}
         {# <div id="error-message" class="error-message" style="display: none;"></div> #}
@@ -109,7 +115,6 @@
             <div id="results-container" class="results-grid">
                 <!-- El contenido inicial se cargará aquí con JavaScript, ahora desde la sesión del servidor -->
             </div>
-            <button id="clear-results-button" class="secondary-button" style="display:none; margin-top: 1rem; width: auto; padding: 0.6rem 1.25rem;">🗑️ Limpiar Resultados</button>
 
             {# MOVER ESTOS DIVS AL main-content #}
             <div id="loading-spinner" class="loading-spinner">✨ Creando tu obra maestra...</div>
@@ -132,5 +137,5 @@
         </div>
     </div>
 
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'994cc410699c9426',t:'MTc2MTUxMTE5Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

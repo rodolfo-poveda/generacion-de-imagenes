@@ -13,8 +13,11 @@ logging.getLogger("streamlit").setLevel(logging.ERROR)
 
 from config import (
     GENERATE_URL_OBFUSCATED, UPLOAD_URL_OBFUSCATED, BASE_HEADERS,
-    MODEL_DISPLAY_NAMES, GOOGLE_SESSION_TOKEN
+    MODEL_DISPLAY_NAMES, GOOGLE_SESSION_TOKEN, GEMINI_API_KEY
 )
+
+# Nueva importación para Gemini
+import google.generativeai as genai
 
 def decode_token(token_b64):
     if not token_b64 or not token_b64.strip(): raise ValueError("El token está vacío.")
@@ -67,6 +70,43 @@ def upload_image(bearer_token, x_client_data, pil_image, mime_type=None):
 def create_blank_image(aspect_ratio_str):
     sizes = {"16:9": (1024, 576), "9:16": (576, 1024), "1:1": (512, 512), "4:3": (768, 576), "3:4": (576, 768)}
     return Image.new('RGB', sizes.get(aspect_ratio_str, (512, 512)), color='white')
+
+# Nueva función para mejorar el prompt con Gemini
+def improve_prompt_with_gemini(original_prompt):
+    if not GEMINI_API_KEY:
+        logging.warning("GEMINI_API_KEY no configurada para mejora de prompt - usando original.")
+        return original_prompt
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(f"Responde SOLO con el prompt mejorado para generación de imágenes con IA de alta calidad. Mantén completamente la idea original sin agregar elementos nuevos o exagerados, solo refina con detalles sutiles, vívidos y optimizaciones mínimas para mejor resultado. NO agregues explicaciones, opciones ni texto adicional. Solo el prompt: {original_prompt}")
+        improved_prompt = response.text.strip()
+        logging.info(f"Mejora de prompt exitosa: '{original_prompt[:50]}...' → '{improved_prompt[:50]}...'")
+        if not improved_prompt:
+            return original_prompt  # Fallback si no hay respuesta
+        return improved_prompt
+    except Exception as e:
+        logging.error(f"Error al mejorar prompt con Gemini: {e}")
+        return original_prompt  # Fallback al original en caso de error
+
+# Nueva función para traducir prompt a inglés
+def translate_to_english(prompt):
+    key = GEMINI_API_KEY  # Usa la variable de config
+    if not key:
+        logging.warning("GEMINI_API_KEY no encontrada - usando prompt original para traducción.")
+        return prompt
+    try:
+        genai.configure(api_key=key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(f"Traduce este prompt al inglés manteniendo el significado exacto y el estilo. Responde SOLO con la traducción: {prompt}")
+        translated = response.text.strip()
+        logging.info(f"Traducción exitosa: '{prompt[:50]}...' → '{translated[:50]}...'")
+        if not translated:
+            return prompt  # Fallback si no hay respuesta
+        return translated
+    except Exception as e:
+        logging.error(f"Error al traducir prompt a inglés: {e}")
+        return prompt  # Fallback al original en caso de error
 
 def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_type, ref_images, save_images_flag=False):
     logging.info(f"\n--- DEBUG: API Request ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ---")

@@ -31,3 +31,6 @@ MODEL_NAMES_LIST = list(MODEL_DISPLAY_NAMES.keys())
 # Esta línea no cambia. os.getenv() encontrará la variable que haya sido
 # cargada por cualquiera de las dos llamadas a load_dotenv().
 GOOGLE_SESSION_TOKEN = os.getenv("GOOGLE_SESSION_TOKEN")
+
+# Nueva adición para Gemini API key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
