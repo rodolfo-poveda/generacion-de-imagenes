@@ -724,16 +724,17 @@ input[type="range"]::-moz-range-thumb {
 
 .ref-image-card button {
     position: absolute;
-    top: -6px;
-    right: -6px;
+    top: 0px;
+    right: 0px;
     background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
     color: white;
     border-radius: 50%;
     width: 24px;
     height: 24px;
-    font-size: 0.75rem;
+    font-size: 0.875rem;  /* Aumentado ligeramente para mejor visibilidad de la X */
+    font-weight: bold;    /* Hace la X más gruesa y clara */
     padding: 0;
-    line-height: 1;
+    line-height: 1;       /* Centrado vertical perfecto */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -745,8 +746,9 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .ref-image-card button:hover {
-    transform: scale(1.2) rotate(90deg);
+    transform: scale(1.2);  /* Solo escala, sin rotación para mantener claridad */
     background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    box-shadow: var(--shadow-lg);  /* Sombra más pronunciada en hover para feedback */
 }
 
 /* FILE UPLOADER MEJORADO */

@@ -43,17 +43,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 @app.before_request
 def initialize_session():
-    # --- CAMBIO 4: VERIFICACIÓN PARA EVITAR CREAR SID EN CADA PETICIÓN ESTÁTICA ---
-    # `request.endpoint` solo existe para rutas reales de Flask, no para
-    # peticiones a archivos estáticos como CSS o JS. Esto evita que los logs se
-    # llenen de información de sesión innecesaria cuando el navegador pide esos archivos.
     if request.endpoint:
         logging.info(f"Session before request: {session.sid if session.sid else 'No SID'}, Keys: {list(session.keys())}")
 
-        # Siempre limpiar resultados y referencias para evitar carga de sesiones previas
-        session['results'] = []
-        session['reference_images_list'] = []
-        session['save_images'] = False
+        # Solo limpiar en la ruta principal (/) para evitar persistencia de sesiones previas en nuevas visitas
+        # NO limpiar en rutas de API como add/remove/update para preservar datos del usuario
+        if request.endpoint == 'index':  # O request.path == '/'
+            session['results'] = []
+            session['reference_images_list'] = []
+            session['save_images'] = False
 
         # Solo inicializar defaults si no existen (para active_tab y aspect_ratio)
         if 'active_tab' not in session:

@@ -569,7 +569,7 @@ document.addEventListener('DOMContentLoaded', function() {
             refCard.className = 'ref-image-card';
             refCard.innerHTML = `
                 <img src="${img_data_url}" alt="Reference Image ${index + 1}" class="clickable-image">
-                <button onclick="window.removeReferenceImage(${index})">🗑️</button>
+                <button onclick="window.removeReferenceImage(${index})">✕</button>
             `;
             referenceImagesContainer.appendChild(refCard);
 
