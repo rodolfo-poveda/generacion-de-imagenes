@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const aspectRatioSelect = document.getElementById('aspect-ratio-select');
     const saveImagesCheckbox = document.getElementById('save_images_checkbox');
     const improvePromptButton = document.getElementById('improve-prompt-button');
+    const magicPromptButton = document.getElementById('magic-prompt-button');
     const loadingSpinner = document.getElementById('loading-spinner');
     const errorMessage = document.getElementById('error-message');
     const successMessage = document.getElementById('success-message');
@@ -25,6 +26,65 @@ document.addEventListener('DOMContentLoaded', function() {
     const referenceUploaderSection = document.getElementById('reference-uploader-section');
     const generateButton = document.getElementById('generate-button');
     const clearResultsButton = document.getElementById('clear-results-button');
+    const modelRadios = document.querySelectorAll('input[name="model_name_display"]');
+
+    // Variables para bloquear botones durante procesos
+    let isProcessing = false;  // Flag global para evitar múltiples clicks
+    const interactiveButtons = [
+        generateButton,
+        improvePromptButton,
+        magicPromptButton,
+        clearResultsButton,
+        ...modelRadios
+    ].filter(btn => btn);  // Filtra solo los que existen
+
+    // Función para bloquear todos los botones interactivos
+    function disableAllButtons() {
+        if (!isProcessing) {
+            isProcessing = true;
+            interactiveButtons.forEach(btn => {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.6';  // Visual: oscurece para feedback
+                    btn.style.cursor = 'not-allowed';
+                    // Si es un radio, estiliza su label asociado
+                    if (btn.type === 'radio') {
+                        const id = btn.id;
+                        if (id) {
+                            const label = document.querySelector(`label[for="${id}"]`);
+                            if (label) {
+                                label.style.opacity = '0.6';
+                                label.style.cursor = 'not-allowed';
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    // Función para reactivar todos los botones
+    function enableAllButtons() {
+        isProcessing = false;
+        interactiveButtons.forEach(btn => {
+            if (btn) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+                // Si es un radio, restaura el estilo de su label asociado
+                if (btn.type === 'radio') {
+                    const id = btn.id;
+                    if (id) {
+                        const label = document.querySelector(`label[for="${id}"]`);
+                        if (label) {
+                            label.style.opacity = '1';
+                            label.style.cursor = 'pointer';
+                        }
+                    }
+                }
+            }
+        });
+    }
 
     // MODAL ELEMENTS
     const imageModal = document.getElementById('image-modal');
@@ -137,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             hideMessages();
-            improvePromptButton.disabled = true;
+            disableAllButtons();
             improvePromptButton.textContent = '🧠 Mejorando...';
             try {
                 const response = await fetch('/improve_prompt', {
@@ -158,16 +218,16 @@ document.addEventListener('DOMContentLoaded', function() {
             } finally {
                 improvePromptButton.disabled = false;
                 improvePromptButton.textContent = '🧠 Mejorar Prompt con Gemini';
+                enableAllButtons();
             }
         });
     }
 
-    const magicPromptButton = document.getElementById('magic-prompt-button');
     if (magicPromptButton) {
         magicPromptButton.addEventListener('click', async function(event) {
             event.preventDefault();
             hideMessages();
-            magicPromptButton.disabled = true;
+            disableAllButtons();
             magicPromptButton.textContent = '✨ Generando...';
             try {
                 const response = await fetch('/generate_magic_prompt', {
@@ -188,6 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } finally {
                 magicPromptButton.disabled = false;
                 magicPromptButton.textContent = '✨ Prompt Mágico';
+                enableAllButtons();
             }
         });
     } 
@@ -275,10 +336,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        await performGenerate(prompt, num_images, seed, aspect_ratio, model_name_display, save_images, currentReferenceImages);
-
-        // Ocultar el spinner al finalizar
-        if (loadingSpinner) loadingSpinner.style.display = 'none';
+        disableAllButtons();
+        try {
+            await performGenerate(prompt, num_images, seed, aspect_ratio, model_name_display, save_images, currentReferenceImages);
+        } finally {
+            // Ocultar el spinner al finalizar
+            if (loadingSpinner) loadingSpinner.style.display = 'none';
+            enableAllButtons();
+        }
     });
 
     function renderGeneratedImages(images) {
@@ -363,6 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (clearResultsButton) {
         clearResultsButton.addEventListener('click', async function() {
             hideMessages();
+            disableAllButtons();
             try {
                 const response = await fetch('/clear_session_results', { method: 'POST' });
                 const data = await response.json();
@@ -384,6 +450,8 @@ document.addEventListener('DOMContentLoaded', function() {
             } catch (error) {
                 //console.error("Error calling /clear_session_results:", error);
                 showMessage(errorMessage, "Error de conexión al resetear interfaz.");
+            } finally {
+                enableAllButtons();
             }
         });
     }
