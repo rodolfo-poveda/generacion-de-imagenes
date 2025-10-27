@@ -52,7 +52,7 @@ body {
 }
 
 .sidebar h1 {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
     margin: 0 0 0.25rem 0;
     color: var(--text-color);
     font-weight: 700;
@@ -894,4 +894,36 @@ footer {
     .radio-group {
         grid-template-columns: 1fr;
     }
+}
+
+.model-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.model-option {
+    padding: 0.75rem 1rem;
+    background: white;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-color);
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.model-option:hover {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-color: var(--primary-color);
+    transform: translateX(2px);
+}
+
+.model-option.active {
+    background: var(--primary-gradient);
+    color: white;
+    border-color: var(--primary-color);
+    font-weight: 600;
 }

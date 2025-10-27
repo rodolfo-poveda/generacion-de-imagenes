@@ -1,4 +1,4 @@
-# app.py
+# app.py (solo cambio en update_session_settings; resto igual)
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_session import Session # <--- ¡Importante!
 import os
@@ -8,6 +8,7 @@ from PIL import Image
 import base64
 import logging
 import google.generativeai as genai
+import time
 # Importa estas variables de config.py
 from config import MODEL_DISPLAY_NAMES, MODEL_NAMES_LIST, GOOGLE_SESSION_TOKEN, GEMINI_API_KEY
 # Importa las funciones de utilidad de utils.py
@@ -46,18 +47,30 @@ def initialize_session():
     if request.endpoint:
         logging.info(f"Session before request: {session.sid if session.sid else 'No SID'}, Keys: {list(session.keys())}")
 
-        # Solo limpiar en la ruta principal (/) para evitar persistencia de sesiones previas en nuevas visitas
-        # NO limpiar en rutas de API como add/remove/update para preservar datos del usuario
-        if request.endpoint == 'index':  # O request.path == '/'
+        if 'results' not in session:
             session['results'] = []
+        if 'reference_images_list' not in session:
             session['reference_images_list'] = []
+        if 'save_images' not in session:
             session['save_images'] = False
 
-        # Solo inicializar defaults si no existen (para active_tab y aspect_ratio)
         if 'active_tab' not in session:
             session['active_tab'] = MODEL_NAMES_LIST[0]
         if 'aspect_ratio_index' not in session:
             session['aspect_ratio_index'] = 0
+
+        SESSION_TIMEOUT_MIN = 30
+        if request.endpoint == 'index':
+            now = time.time()
+            last_activity = session.get('last_activity', 0)
+            if now - last_activity > SESSION_TIMEOUT_MIN * 60 or 'last_activity' not in session:
+                logging.info(f"New visit detected for SID {session.sid}: Cleaning old refs/results.")
+                session['results'] = []
+                session['reference_images_list'] = []
+                session['save_images'] = False
+                session['last_activity'] = now
+            else:
+                session['last_activity'] = now
 
 @app.route('/')
 def index():
@@ -204,17 +217,31 @@ def generate_images():
 
 @app.route('/update_session_settings', methods=['POST'])
 def update_session_settings():
-    data = request.json
-    if 'active_tab' in data:
-        session['active_tab'] = data['active_tab']
-        session['results'] = [] 
-        session['save_images'] = False 
-    if 'aspect_ratio_index' in data:
+    data = request.json  # Datos del JS: {active_tab: "Nuevo Modelo"}
+    
+    if 'active_tab' in data:  # Si viene cambio de modelo
+        new_tab = data['active_tab']  # Ej: "Imagen desde Referencia (V3.5)"
+        session['active_tab'] = new_tab  # Actualiza en sesión (reload lo renderiza en header)
+        
+        session['results'] = []  # Limpia results viejos (nueva gen)
+        session['save_images'] = False  # Resetea flag de save
+        
+        # CAMBIO CLAVE: Manejo inteligente de refs
+        new_model_type = MODEL_DISPLAY_NAMES.get(new_tab, '')  # Obtiene tipo interno (ej: "R2I" para ref models)
+        if new_model_type not in ["R2I", "GEM_PIX"]:  # Si nuevo modelo NO usa refs (ej: 3.1 o 3.5)
+            session['reference_images_list'] = []  # Limpia refs (no sirven aquí)
+            logging.info(f"Cleaned refs on switch to non-ref model: {new_tab}")  # Log para debug
+        else:  # Si SÍ usa refs (R2I o GEM_PIX)
+            # NO limpia: Preserva refs (ej: de "Usar en" desde 3.1)
+            logging.info(f"Preserved refs on switch to ref model: {new_tab}")  # Log para debug
+            
+    if 'aspect_ratio_index' in data:  # Si viene cambio de ratio
         session['aspect_ratio_index'] = data['aspect_ratio_index']
-    if 'save_images' in data:
+    if 'save_images' in data:  # Si viene toggle de save
         session['save_images'] = data['save_images']
-    logging.info(f"Session settings updated for SID {session.sid}: {data}")
-    return jsonify({'status': 'success'})
+    
+    logging.info(f"Session settings updated for SID {session.sid}: {data}")  # Log general
+    return jsonify({'status': 'success'})  # OK al JS
 
 @app.route('/add_reference_image', methods=['POST'])
 def add_reference_image():

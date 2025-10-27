@@ -1,4 +1,4 @@
-// static/js/app.js - VERSIÓN CON MODAL FUNCIONAL (EVENT LISTENERS PARA CLICK EN IMGS)
+// static/js/app.js - VERSIÓN CORREGIDA PARA EXPANDER DE MODELOS (SIN RADIOS)
 
 document.addEventListener('DOMContentLoaded', function() {
     const body = document.body;
@@ -26,7 +26,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const referenceUploaderSection = document.getElementById('reference-uploader-section');
     const generateButton = document.getElementById('generate-button');
     const clearResultsButton = document.getElementById('clear-results-button');
-    const modelRadios = document.querySelectorAll('input[name="model_name_display"]');
+
+    // CAMBIO CLAVE: Detectar modelo activo desde expander header (no radios)
+    function getActiveModelName() {
+        const headerSpan = document.querySelector('.model-expander .expander-header span:first-child');
+        return headerSpan ? headerSpan.textContent.trim() : window.initialSessionState.active_tab;
+    }
 
     // Variables para bloquear botones durante procesos
     let isProcessing = false;  // Flag global para evitar múltiples clicks
@@ -34,9 +39,8 @@ document.addEventListener('DOMContentLoaded', function() {
         generateButton,
         improvePromptButton,
         magicPromptButton,
-        clearResultsButton,
-        ...modelRadios
-    ].filter(btn => btn);  // Filtra solo los que existen
+        clearResultsButton
+    ].filter(btn => btn);  // Filtra solo los que existen (sin radios)
 
     // Función para bloquear todos los botones interactivos
     function disableAllButtons() {
@@ -47,17 +51,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     btn.disabled = true;
                     btn.style.opacity = '0.6';  // Visual: oscurece para feedback
                     btn.style.cursor = 'not-allowed';
-                    // Si es un radio, estiliza su label asociado
-                    if (btn.type === 'radio') {
-                        const id = btn.id;
-                        if (id) {
-                            const label = document.querySelector(`label[for="${id}"]`);
-                            if (label) {
-                                label.style.opacity = '0.6';
-                                label.style.cursor = 'not-allowed';
-                            }
-                        }
-                    }
                 }
             });
         }
@@ -71,17 +64,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.disabled = false;
                 btn.style.opacity = '1';
                 btn.style.cursor = 'pointer';
-                // Si es un radio, restaura el estilo de su label asociado
-                if (btn.type === 'radio') {
-                    const id = btn.id;
-                    if (id) {
-                        const label = document.querySelector(`label[for="${id}"]`);
-                        if (label) {
-                            label.style.opacity = '1';
-                            label.style.cursor = 'pointer';
-                        }
-                    }
-                }
             }
         });
     }
@@ -96,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     let currentReferenceImages = window.initialSessionState.reference_images_list || [];
-    let activeModelDisplayName = window.initialSessionState.active_tab;
+    let activeModelDisplayName = getActiveModelName();  // Inicial desde DOM o session
 
     // FUNCIONES DEL MODAL PARA AMPLIAR IMÁGENES
     window.openImageModal = function(imageSrc) {
@@ -175,15 +157,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    // CAMBIO CLAVE: toggleExpander usa classes para matching CSS
     window.toggleExpander = function(header) {
         header.classList.toggle('active');
         const content = header.nextElementSibling;
         if (content) {
-            if (content.style.display === 'block') {
-                content.style.display = 'none';
-            } else {
-                content.style.display = 'block';
-            }
+            content.classList.toggle('active');
+        }
+        const arrow = header.querySelector('span:last-child');
+        if (arrow) {
+            arrow.textContent = header.classList.contains('active') ? '▲' : '▼';
         }
     };
 
@@ -325,8 +308,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const num_images = numImagesSlider ? numImagesSlider.value : 4; 
         const seed = seedInput ? seedInput.value : -1;
         const aspect_ratio = aspectRatioSelect ? aspectRatioSelect.value : '1:1';
-        const selectedRadio = document.querySelector('input[name="model_name_display"]:checked');
-        const model_name_display = selectedRadio ? selectedRadio.value : '';
+        // CAMBIO CLAVE: Usar getActiveModelName() en lugar de radios
+        const model_name_display = getActiveModelName();
         const save_images = saveImagesCheckbox ? saveImagesCheckbox.checked : false;
 
         if (!prompt.trim()) {
@@ -526,6 +509,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // CAMBIO CLAVE: addReferenceImage sin radios, directo a handleTabChange
     window.addReferenceImage = async function(imageDataUrl, modelToActivate = null, fromAddButton = false) {
         hideMessages();
         const maxReferences = 3;
@@ -538,11 +522,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const status = await updateSessionReferenceImages(imageDataUrl, 'add');
         if (status) { 
             if (modelToActivate && activeModelDisplayName !== modelToActivate) {
-                const radioToActivate = document.querySelector(`input[name="model_name_display"][value="${modelToActivate}"]`);
-                if (radioToActivate) {
-                    radioToActivate.checked = true;
-                    window.handleTabChange(modelToActivate);
-                }
+                window.handleTabChange(modelToActivate);
             } else {
                 renderReferenceImages(); 
                 if (fromAddButton) showMessage(successMessage, "Imagen añadida a referencias.", 'success');
@@ -676,6 +656,9 @@ document.addEventListener('DOMContentLoaded', function() {
             showInitialMessage();  // Muestra mensaje por defecto sin generar nada
             if (clearResultsButton) clearResultsButton.style.display = 'none';
         }
+
+        // Actualizar activeModelDisplayName desde DOM actual
+        activeModelDisplayName = getActiveModelName();
     }
 
     initializeUI();

@@ -25,11 +25,21 @@
         <hr>
 
         <h3>🤖 Modelo de IA</h3>
-        <div class="radio-group">
-            {% for model_name in model_names_list %}
-            <input type="radio" id="model_{{ loop.index }}" name="model_name_display" value="{{ model_name }}" {% if model_name == active_tab %}checked{% endif %} onchange="window.handleTabChange(this.value)">
-            <label for="model_{{ loop.index }}">{{ model_name }}</label>
-            {% endfor %}
+        <!-- EXPANDER PARA MODELO DE IA: Colapsado por default, se expande al clic y colapsa tras selección (reload) -->
+        <div class="expander model-expander">
+            <div class="expander-header" onclick="window.toggleExpander(this)">
+                <span>{{ active_tab }}</span>
+                <span>▼</span>
+            </div>
+            <div class="expander-content">
+                <div class="model-list">
+                    {% for model_name in model_names_list %}
+                    <div class="model-option {% if model_name == active_tab %}active{% endif %}" onclick="window.handleTabChange('{{ model_name }}')">
+                        {{ model_name }}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
 
         <hr>
@@ -55,7 +65,7 @@
             </div>
             <div class="expander-content">
                 <label for="seed-input">🎲 Semilla</label>
-                <input type="number" id="seed-input" value="-1" min="-1" max="999999" step="1" help="Usa -1 para una semilla aleatoria.">
+                <input type="number" id="seed-input" value="-1" min="-1" max="999999" step="1">
 
                 <label for="aspect-ratio-select">📐 Relación de Aspecto</label>
                 <select id="aspect-ratio-select">
@@ -103,10 +113,6 @@
 
         <button id="generate-button" type="submit" class="primary-button">🚀 Generar Imágenes</button>
         <button id="clear-results-button" class="secondary-button" style="display:none; margin-top: 1rem; width: 100%; padding: 0.6rem 1.25rem;">🗑️ Resetear Interfaz</button>
-        {# ELIMINAR ESTOS DIVS DEL SIDEBAR #}
-        {# <div id="loading-spinner" class="loading-spinner">✨ Creando tu obra maestra...</div> #}
-        {# <div id="error-message" class="error-message" style="display: none;"></div> #}
-        {# <div id="success-message" class="info-message" style="display: none;"></div> #}
     </div>
 
     <div class="content-wrapper">
@@ -116,7 +122,6 @@
                 <!-- El contenido inicial se cargará aquí con JavaScript, ahora desde la sesión del servidor -->
             </div>
 
-            {# MOVER ESTOS DIVS AL main-content #}
             <div id="loading-spinner" class="loading-spinner">✨ Creando tu obra maestra...</div>
             <div id="error-message" class="error-message" style="display: none;"></div>
             <div id="success-message" class="info-message" style="display: none;"></div>
