@@ -186,8 +186,7 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
                     return {'status': 'error', 'message': 'no_images_returned'}
                 
                 output_images_b64 = []
-                if save_images_flag:
-                    os.makedirs("output", exist_ok=True); timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                # ELIMINADO: No guardar en servidor. Removido el bloque if save_images_flag para os.makedirs y pil_image.save
 
                 for i, img_data in enumerate(generated_images_data):
                     if "encodedImage" in img_data:
@@ -197,8 +196,8 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
                             img_b64 = base64.b64encode(img_bytes).decode('utf-8')
                             output_images_b64.append(f"data:image/png;base64,{img_b64}")
                             
-                            if save_images_flag:
-                                pil_image.save(f"output/generado_{timestamp}_{i+1}.png")
+                            # ELIMINADO: No guardar en servidor. Removidas las líneas de save_images_flag aquí
+                            
                         except Exception as e:
                             logging.error(f"  DEBUG: Error processing image {i}: {e}")
                             continue  # Skip bad image

@@ -268,6 +268,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 showMessage(successMessage, `🎉 ¡${result.images.length} imagen(es) generada(s)!`, 'success');
                 window.initialSessionState.save_images = save_images; 
                 updateFooterSaveMessage(result.images.length > 0);
+
+                // NUEVO: Auto-descarga si save_images es true
+                if (save_images) {
+                    setTimeout(() => {
+                        result.images.forEach((imgDataUrl, index) => {
+                            downloadImage(imgDataUrl, index + 1);
+                        });
+                        showMessage(successMessage, `🎉 ${result.images.length} imágenes descargadas automáticamente.`, 'success');
+                    }, 500);  // Delay para que el DOM se renderice
+                }
+
                 if (clearResultsButton) clearResultsButton.style.display = 'block';
                 return true;
             } else {
@@ -390,7 +401,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             ${actionButtonsHtml}
                         </div>
                         <div class="download-col">
-                            <a href="${img_data_url}" download="generada_${index + 1}.png" class="download-button">📥</a>
+                            <button class="download-button" onclick="downloadImage('${img_data_url}', ${index + 1})">📥</button>
                         </div>
                     </div>
                 `;
@@ -636,7 +647,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (copyrightP) footer.insertBefore(infoMessageDiv, copyrightP);
                 else footer.appendChild(infoMessageDiv);
             }
-            infoMessageDiv.textContent = "💾 Las imágenes se han guardado en la carpeta `output/` del servidor.";
+            infoMessageDiv.textContent = "💾 Las imágenes generadas se descargarán en tu dispositivo automáticamente.";
             infoMessageDiv.style.display = 'block';
         } else {
             if (infoMessageDiv) {
@@ -651,6 +662,16 @@ document.addEventListener('DOMContentLoaded', function() {
         if (window.initialSessionState.results && window.initialSessionState.results.length > 0) {
             renderGeneratedImages(window.initialSessionState.results);
             updateFooterSaveMessage(true); 
+
+            // NUEVO: Auto-descarga si save_images es true al inicializar
+            if (window.initialSessionState.save_images) {
+                setTimeout(() => {
+                    window.initialSessionState.results.forEach((imgDataUrl, index) => {
+                        downloadImage(imgDataUrl, index + 1);
+                    });
+                }, 500);
+            }
+
             if (clearResultsButton) clearResultsButton.style.display = 'block';
         } else {
             showInitialMessage();  // Muestra mensaje por defecto sin generar nada
@@ -660,6 +681,16 @@ document.addEventListener('DOMContentLoaded', function() {
         // Actualizar activeModelDisplayName desde DOM actual
         activeModelDisplayName = getActiveModelName();
     }
+
+    // NUEVA: Función para descargar imagen (client-side)
+    window.downloadImage = function(dataUrl, index) {
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `imagen_generada_${index}_${new Date().getTime()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     initializeUI();
 });
