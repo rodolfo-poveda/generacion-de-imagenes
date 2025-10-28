@@ -109,9 +109,11 @@ def translate_to_english(prompt):
         return prompt  # Fallback al original en caso de error
 
 def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_type, ref_images, save_images_flag=False):
+    import time
     logging.info(f"\n--- DEBUG: API Request ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ---")
     logging.info(f"  Model Type (Internal): {model_type}")
-    try: bearer_token, x_client_data = decode_token(GOOGLE_SESSION_TOKEN)
+    try:
+        bearer_token, x_client_data = decode_token(GOOGLE_SESSION_TOKEN)
     except ValueError as e: 
         logging.error(f"Token decode error: {e}")
         return {'status': 'error', 'message': f'auth_error: {str(e)}'}
@@ -167,14 +169,15 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
 
     try:
         real_generate_url = base64.b64decode(GENERATE_URL_OBFUSCATED).decode('utf-8')
-        logging.info(f"  DEBUG: Sending request to: {real_generate_url}")
-
+        logging.info(f"  DEBUG: Sending request to: {real_generate_url} with payload: {payload}")
+        start_time = time.time()
         response = requests.post(real_generate_url, headers=headers, json=payload, timeout=90)
+        end_time = time.time()
         response.encoding = 'utf-8'  # Ensure no bytes in text/json
+        logging.info(f"  DEBUG: API request completed in {end_time - start_time:.2f} seconds, Status: {response.status_code}, Response (first 500 chars): {response.text[:500]}...")
         
         logging.info(f"--- DEBUG: API Response ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ---")
         logging.info(f"  Status Code: {response.status_code}")
-        logging.info(f"  Response Body (first 500 chars): {response.text[:500]}...")
 
         if response.status_code == 200:
             try:
@@ -247,5 +250,5 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
         return {'status': 'error', 'message': f'connection_error: {str(e)}'}
     except Exception as e:
         logging.error(f"Unhandled exception in main_generator_function: {e}")
-        logging.error(f"Response status: {response.status_code}, Response body: {response.text[:1000]}")
+        logging.error(f"Response status: {response.status_code if 'response' in locals() else 'No response'}, Response body: {response.text[:1000] if 'response' in locals() else 'No response'}")
         return {'status': 'error', 'message': f'connection_error: {str(e)}'}
