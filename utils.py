@@ -246,5 +246,6 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
         logging.error(f"--- DEBUG: API Connection Error: {e} ---")
         return {'status': 'error', 'message': f'connection_error: {str(e)}'}
     except Exception as e:
-        logging.error(f"--- DEBUG: Unhandled exception in main_generator_function: {e} ---")
+        logging.error(f"Unhandled exception in main_generator_function: {e}")
+        logging.error(f"Response status: {response.status_code}, Response body: {response.text[:1000]}")
         return {'status': 'error', 'message': f'connection_error: {str(e)}'}
