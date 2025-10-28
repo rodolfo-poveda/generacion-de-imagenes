@@ -10,10 +10,8 @@ COPY . .
 
 # Establecer variables de entorno
 ENV FLASK_APP=app.py
-# Considera usar un .env para el token localmente, y para Dockploy inyectarlo como secreto o variable de entorno
 
 EXPOSE 5000
 
-# Comando para ejecutar la aplicación con Gunicorn (más robusto que flask run)
-# CAMBIO: Agregado --threads 8 --worker-class gthread para paralelismo en I/O (API calls no bloquean)
-CMD ["gunicorn", "--workers", "3", "--threads", "8", "--worker-class", "gthread", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
+# MÁXIMO: 4 workers x 12 threads = ~48 slots paralelos (seguro para 1 core/4GB)
+CMD ["gunicorn", "--workers", "4", "--threads", "12", "--worker-class", "gthread", "--bind", "0.0.0.0:5000", "--timeout", "180", "--max-requests", "1000", "app:app"]
