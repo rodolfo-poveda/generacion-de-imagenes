@@ -15,4 +15,5 @@ ENV FLASK_APP=app.py
 EXPOSE 5000
 
 # Comando para ejecutar la aplicación con Gunicorn (más robusto que flask run)
-CMD ["gunicorn", "--workers", "3", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
+# CAMBIO: Agregado --threads 8 --worker-class gthread para paralelismo en I/O (API calls no bloquean)
+CMD ["gunicorn", "--workers", "3", "--threads", "8", "--worker-class", "gthread", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
