@@ -1,6 +1,6 @@
-# app.py (solo cambio en update_session_settings; resto igual)
+# app.py
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
-from flask_session import Session # <--- ¡Importante!
+from flask_session import Session
 import os
 import io
 import random
@@ -9,37 +9,22 @@ import base64
 import logging
 import google.generativeai as genai
 import time
-# Importa estas variables de config.py
+
 from config import MODEL_DISPLAY_NAMES, MODEL_NAMES_LIST, GOOGLE_SESSION_TOKEN, GEMINI_API_KEY
-# Importa las funciones de utilidad de utils.py
-from utils import main_generator_function, create_blank_image, improve_prompt_with_gemini, translate_to_english
+from utils import (
+    main_generator_function, create_blank_image,
+    improve_and_translate_to_english, generate_magic_prompt_in_english, translate_to_english
+)
 
-app = Flask(__name__) # <--- ¡Esta es la instancia de la aplicación Flask!
-
-# --- CAMBIO 1: CONFIGURACIÓN DE SESIÓN ROBUSTA PARA PRODUCCIÓN ---
-# Elimina `app.secret_key` y lo centraliza en la configuración de la app,
-# cargándolo desde una variable de entorno, que es la práctica correcta.
-# Dokploy inyectará esta variable.
+app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'una-clave-secreta-solo-para-desarrollo-local')
-
-# Configuración para usar el sistema de archivos como almacenamiento de sesión.
-# Esto garantiza que todos los workers de Gunicorn compartan la misma sesión.
 app.config["SESSION_TYPE"] = "filesystem"
-app.config["SESSION_PERMANENT"] = False # Mantiene la sesión entre reinicios del navegador
-app.config["SESSION_USE_SIGNER"] = True # Firma criptográficamente la cookie de sesión
-
-# --- CAMBIO 2: RUTA DE SESIÓN ABSOLUTA PARA ENTORNOS DE CONTENEDOR ---
-# Usar una ruta absoluta como '/tmp/' es más seguro y predecible dentro de un
-# contenedor de Docker que una ruta relativa como './flask_session_data'.
+app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_USE_SIGNER"] = True
 app.config["SESSION_FILE_DIR"] = "/tmp/flask_session"
 
-# --- CAMBIO 3: ELIMINAR CONFIGURACIONES INNECESARIAS O REDUNDANTES ---
-# Se eliminan SESSION_FILE_THRESHOLD, SESSION_FILE_MODE
-# ya que sus valores por defecto son adecuados y no es necesario especificarlos.
+Session(app)
 
-Session(app) # Inicializa Flask-Session con la configuración anterior
-
-# Configuración del logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @app.before_request
@@ -90,35 +75,29 @@ def improve_prompt():
     data = request.json
     prompt = data.get('prompt', '').strip()
     if not prompt:
-        return jsonify({'status': 'error', 'message': '⚠️ Escribe un prompt para mejorar.'}), 400
+        return jsonify({'status': 'error', 'message': 'Escribe un prompt para mejorar.'}), 400
     
     try:
-        improved_prompt = improve_prompt_with_gemini(prompt)
-        logging.info(f"Prompt mejorado para sesión {session.sid}: '{improved_prompt[:100]}...'")
-        return jsonify({'status': 'success', 'improved_prompt': improved_prompt})
+        improved_en = improve_and_translate_to_english(prompt)
+        logging.info(f"Prompt improved & translated for session {session.sid}: '{improved_en[:100]}...'")
+        return jsonify({'status': 'success', 'improved_prompt': improved_en})
     except Exception as e:
-        logging.error(f"Error en improve_prompt para sesión {session.sid}: {e}")
-        return jsonify({'status': 'error', 'message': f'❌ Error al mejorar prompt: {str(e)}. Usando el original.'}), 500
+        logging.error(f"Error in improve_prompt for session {session.sid}: {e}")
+        return jsonify({'status': 'error', 'message': f'Error al mejorar prompt: {str(e)}. Usando el original.'}), 500
 
 @app.route('/generate_magic_prompt', methods=['POST'])
 def generate_magic_prompt():
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        response = model.generate_content("Genera UN SOLO prompt corto (20-40 palabras) y aleatorio para generación de imágenes con IA. En español, estilo fotorealista/descriptivo con escenas vívidas similares a estos ejemplos: 'Foto de un gato flotando en el espacio con traje de astronauta, con la Tierra de fondo' o 'Retrato fotorrealista de una mujer con pendientes elaborados iluminada frontalmente, retrato de cuerpo completo, hiperrealista'. Incluye detalles sensoriales y narrativos, pero manténlo conciso. Responde SOLO con el prompt, sin explicaciones.")
-        magic_prompt_es = response.text.strip()
-        logging.info(f"Prompt mágico generado (ES) para sesión {session.sid}: '{magic_prompt_es[:100]}...'")
-        if not magic_prompt_es:
-            return jsonify({'status': 'error', 'message': '❌ Error al generar prompt. Inténtalo de nuevo.'}), 500
-        return jsonify({'status': 'success', 'magic_prompt': magic_prompt_es})
+        magic_en = generate_magic_prompt_in_english()
+        return jsonify({'status': 'success', 'magic_prompt': magic_en})
     except Exception as e:
-        logging.error(f"Error en generate_magic_prompt para sesión {session.sid}: {e}")
-        return jsonify({'status': 'error', 'message': f'❌ Error al generar prompt mágico: {str(e)}.'}), 500    
+        logging.error(f"Error in generate_magic_prompt for session {session.sid}: {e}")
+        return jsonify({'status': 'error', 'message': f'Error al generar prompt mágico: {str(e)}.'}), 500    
 
 @app.route('/generate', methods=['POST'])
 def generate_images():
     data = request.json
-    prompt = data.get('prompt', '')
+    prompt_es = data.get('prompt', '')
     num_images = int(data.get('num_images', 4))
     seed = int(data.get('seed', -1))
     selected_ratio = data.get('aspect_ratio', '1:1')
@@ -128,19 +107,12 @@ def generate_images():
 
     model_type = MODEL_DISPLAY_NAMES.get(model_name_display)
 
-    if not prompt.strip():
-        return jsonify({'status': 'error', 'message': '⚠️ Por favor, escribe una descripción.'}), 400
+    if not prompt_es.strip():
+        return jsonify({'status': 'error', 'message': 'Por favor, escribe una descripción.'}), 400
 
-    # Log extra para debug de key
-    gemini_key = os.getenv('GEMINI_API_KEY')
-    if gemini_key:
-        logging.info(f"GEMINI_API_KEY encontrada para traducción (primeros 10 chars: {gemini_key[:10]}...)")
-    else:
-        logging.warning("GEMINI_API_KEY NO encontrada - traducción fallará, usando prompt original.")
-
-    # Traducir prompt a inglés para el modelo (mantener original en logs/español para frontend)
-    prompt_english = translate_to_english(prompt)
-    logging.info(f"Prompt original (ES): '{prompt[:100]}...' → Traducido (EN): '{prompt_english[:100]}...'")
+    # Traducción optimizada
+    prompt_en = translate_to_english(prompt_es)
+    logging.info(f"Prompt original (ES): '{prompt_es[:100]}...' → Final (EN): '{prompt_en[:100]}...'")
 
     is_ref_model = model_type in ["R2I", "GEM_PIX"]
     refs_provided = bool(ref_images_data_urls)
@@ -148,7 +120,7 @@ def generate_images():
     final_ref_images = ref_images_data_urls
     if is_ref_model and not refs_provided:
         if model_type == "R2I":
-            return jsonify({'status': 'error', 'message': f"⚠️ El modelo '{model_name_display}' requiere una imagen de referencia."}), 400
+            return jsonify({'status': 'error', 'message': f"El modelo '{model_name_display}' requiere una imagen de referencia."}), 400
         elif model_type == "GEM_PIX":
             logging.info("GEM_PIX selected without reference images. Creating blank image.")
             blank_img_pil = create_blank_image(selected_ratio)
@@ -160,48 +132,36 @@ def generate_images():
     if not GOOGLE_SESSION_TOKEN:
          return jsonify({'status': 'error', 'message': 'auth_error: GOOGLE_SESSION_TOKEN no configurado en el servidor.'}), 500
 
-    result = main_generator_function(prompt_english, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag)
+    result = main_generator_function(prompt_en, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag)
     
     if result['status'] == 'success':
-        converted_images = []
-        for pil_img in result['images']:
-            if isinstance(pil_img, Image.Image):
-                buffered = io.BytesIO()
-                pil_img.save(buffered, format="PNG")
-                img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-                data_url = f"data:image/png;base64,{img_base64}"
-                converted_images.append(data_url)
-            else:
-                converted_images.append(pil_img)
-        result['images'] = converted_images
-        
         session['results'] = result['images']
         session['save_images'] = save_images_flag 
         logging.info(f"Generated {len(result['images'])} images for session {session.sid}. Save images: {save_images_flag}")
         return jsonify({'status': 'success', 'images': result['images']})
     else:
         detailed_error_messages = {
-            "minor_upload_error": "🚫 La imagen de referencia podría contener contenido inapropiado (ej. menores, contenido explícito). Por favor, usa otra imagen.",
-            "prominent_people_error": "🚫 La imagen de referencia contiene personas prominentes o contenido sensible. Por favor, usa otra imagen.",
-            "child_exploitation_error": "🚫 Contenido de explotación infantil detectado en la imagen de referencia. Esta acción está estrictamente prohibida.",
-            "harmful_content_error": "🚫 La imagen de referencia contiene contenido dañino. Por favor, usa otra imagen.",
-            "generic_upload_error": "❌ Error al procesar la imagen de referencia. Asegúrate de que sea una imagen válida y no esté dañada.",
-            "image_too_large": "📦 La imagen de referencia es demasiado grande. El tamaño máximo permitido es 10MB.",
-            "upload_failed: no_media_ids": "📤 Fallo interno: No se pudieron subir las imágenes de referencia. Intenta de nuevo.", 
-            "unsafe_generation_error": "🎨 Tu descripción infringe las políticas de contenido seguro (ej. menores, contenido explícito, violento). Por favor, modifica tu prompt.",
-            "minors_error": "🚫 Contenido relacionado con menores o de naturaleza sensible en la descripción. Por favor, ajusta tu prompt.",
-            "sexual_error": "🚫 Contenido de naturaleza sexual en la descripción. Por favor, ajusta tu prompt.",
-            "violence_error": "🚫 Contenido violento o gráfico en la descripción. Por favor, ajusta tu prompt.",
-            "criminal_error": "🚫 Contenido relacionado con actividades criminales en la descripción. Por favor, ajusta tu prompt.",
-            "no_images_returned": "🤔 La IA no pudo generar imágenes para tu descripción. Intenta con un prompt diferente.",
-            "auth_error": f"🔑 Error de autenticación: Tu sesión ha caducado o es inválida. Vuelve a cargar la página e inténtalo de nuevo. Detalles: {result['message'].split(':', 1)[1].strip() if ':' in result['message'] else result['message']}",
-            "connection_error: timeout": "🌐 La conexión con la IA se agotó (timeout). Revisa tu conexión a internet o intenta más tarde.",
-            "connection_error": "🌐 Error de conexión con el servidor de IA. Revisa tu conexión a internet e inténtalo de nuevo.",
-            "generic_api_error: invalid_json": "⚙️ La respuesta de la IA no es válida. Intenta de nuevo.",
-            "generic_api_error: non_json_error_response": "⚙️ La IA devolvió un error inesperado en el formato. Intenta de nuevo.",
-            "internal_config_error": "⚙️ Error de configuración interna de la aplicación. Por favor, contacta al soporte.", 
-            "no_image_provided": "❌ No se proporcionó ninguna imagen para subir. Esto es un error interno.", 
-            "generic_api_error": "⚙️ La IA devolvió un error interno. Intenta de nuevo o con un prompt/imagen diferente."
+            "minor_upload_error": "La imagen de referencia podría contener contenido inapropiado (ej. menores, contenido explícito). Por favor, usa otra imagen.",
+            "prominent_people_error": "La imagen de referencia contiene personas prominentes o contenido sensible. Por favor, usa otra imagen.",
+            "child_exploitation_error": "Contenido de explotación infantil detectado en la imagen de referencia. Esta acción está estrictamente prohibida.",
+            "harmful_content_error": "La imagen de referencia contiene contenido dañino. Por favor, usa otra imagen.",
+            "generic_upload_error": "Error al procesar la imagen de referencia. Asegúrate de que sea una imagen válida y no esté dañada.",
+            "image_too_large": "La imagen de referencia es demasiado grande. El tamaño máximo permitido es 10MB.",
+            "upload_failed: no_media_ids": "Fallo interno: No se pudieron subir las imágenes de referencia. Intenta de nuevo.", 
+            "unsafe_generation_error": "Tu descripción infringe las políticas de contenido seguro (ej. menores, contenido explícito, violento). Por favor, modifica tu prompt.",
+            "minors_error": "Contenido relacionado con menores o de naturaleza sensible en la descripción. Por favor, ajusta tu prompt.",
+            "sexual_error": "Contenido de naturaleza sexual en la descripción. Por favor, ajusta tu prompt.",
+            "violence_error": "Contenido violento o gráfico en la descripción. Por favor, ajusta tu prompt.",
+            "criminal_error": "Contenido relacionado con actividades criminales en la descripción. Por favor, ajusta tu prompt.",
+            "no_images_returned": "La IA no pudo generar imágenes para tu descripción. Intenta con un prompt diferente.",
+            "auth_error": f"Error de autenticación: Tu sesión ha caducado o es inválida. Vuelve a cargar la página e inténtalo de nuevo. Detalles: {result['message'].split(':', 1)[1].strip() if ':' in result['message'] else result['message']}",
+            "connection_error: timeout": "La conexión con la IA se agotó (timeout). Revisa tu conexión a internet o intenta más tarde.",
+            "connection_error": "Error de conexión con el servidor de IA. Revisa tu conexión a internet e inténtalo de nuevo.",
+            "generic_api_error: invalid_json": "La respuesta de la IA no es válida. Intenta de nuevo.",
+            "generic_api_error: non_json_error_response": "La IA devolvió un error inesperado en el formato. Intenta de nuevo.",
+            "internal_config_error": "Error de configuración interna de la aplicación. Por favor, contacta al soporte.", 
+            "no_image_provided": "No se proporcionó ninguna imagen para subir. Esto es un error interno.", 
+            "generic_api_error": "La IA devolvió un error interno. Intenta de nuevo o con un prompt/imagen diferente."
         }
         
         message_key = result['message']
@@ -217,31 +177,29 @@ def generate_images():
 
 @app.route('/update_session_settings', methods=['POST'])
 def update_session_settings():
-    data = request.json  # Datos del JS: {active_tab: "Nuevo Modelo"}
+    data = request.json  
     
-    if 'active_tab' in data:  # Si viene cambio de modelo
-        new_tab = data['active_tab']  # Ej: "Imagen desde Referencia (V3.5)"
-        session['active_tab'] = new_tab  # Actualiza en sesión (reload lo renderiza en header)
+    if 'active_tab' in data:  
+        new_tab = data['active_tab']  
+        session['active_tab'] = new_tab  
         
-        session['results'] = []  # Limpia results viejos (nueva gen)
-        session['save_images'] = False  # Resetea flag de save
+        session['results'] = []  
+        session['save_images'] = False  
         
-        # CAMBIO CLAVE: Manejo inteligente de refs
-        new_model_type = MODEL_DISPLAY_NAMES.get(new_tab, '')  # Obtiene tipo interno (ej: "R2I" para ref models)
-        if new_model_type not in ["R2I", "GEM_PIX"]:  # Si nuevo modelo NO usa refs (ej: 3.1 o 3.5)
-            session['reference_images_list'] = []  # Limpia refs (no sirven aquí)
-            logging.info(f"Cleaned refs on switch to non-ref model: {new_tab}")  # Log para debug
-        else:  # Si SÍ usa refs (R2I o GEM_PIX)
-            # NO limpia: Preserva refs (ej: de "Usar en" desde 3.1)
-            logging.info(f"Preserved refs on switch to ref model: {new_tab}")  # Log para debug
+        new_model_type = MODEL_DISPLAY_NAMES.get(new_tab, '')  
+        if new_model_type not in ["R2I", "GEM_PIX"]:  
+            session['reference_images_list'] = []  
+            logging.info(f"Cleaned refs on switch to non-ref model: {new_tab}")  
+        else:  
+            logging.info(f"Preserved refs on switch to ref model: {new_tab}")  
             
-    if 'aspect_ratio_index' in data:  # Si viene cambio de ratio
+    if 'aspect_ratio_index' in data:  
         session['aspect_ratio_index'] = data['aspect_ratio_index']
-    if 'save_images' in data:  # Si viene toggle de save
+    if 'save_images' in data:  
         session['save_images'] = data['save_images']
     
-    logging.info(f"Session settings updated for SID {session.sid}: {data}")  # Log general
-    return jsonify({'status': 'success'})  # OK al JS
+    logging.info(f"Session settings updated for SID {session.sid}: {data}")  
+    return jsonify({'status': 'success'})  
 
 @app.route('/add_reference_image', methods=['POST'])
 def add_reference_image():
@@ -274,11 +232,10 @@ def clear_session_results():
         session['reference_images_list'] = []
         session['save_images'] = False
         session['aspect_ratio_index'] = 0
-        session.clear()  # Limpia toda la sesión para no guardar previas
+        session.clear()  
         logging.info(f"Reset complete for session {session.sid}: cleared results, references, save_images, and aspect_ratio_index.")
     return jsonify({'status': 'success'})
 
 
 if __name__ == '__main__':
-    # No es necesario crear el directorio aquí, Flask-Session lo hará automáticamente
     app.run(debug=True)

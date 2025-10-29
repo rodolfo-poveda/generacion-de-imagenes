@@ -5,9 +5,11 @@ import json
 import os
 import random
 from datetime import datetime
+from functools import lru_cache
 from PIL import Image
 import requests
 import logging
+from langdetect import detect, DetectorFactory
 
 logging.getLogger("streamlit").setLevel(logging.ERROR)
 
@@ -16,9 +18,102 @@ from config import (
     MODEL_DISPLAY_NAMES, GOOGLE_SESSION_TOKEN, GEMINI_API_KEY
 )
 
-# Nueva importación para Gemini
 import google.generativeai as genai
 
+# --- DETECCIÓN DE IDIOMA CON langdetect ---
+DetectorFactory.seed = 0
+
+def is_english(prompt: str) -> bool:
+    if not prompt or len(prompt.strip()) < 5:
+        return False
+    try:
+        lang = detect(prompt.strip())
+        return lang == 'en'
+    except:
+        logging.warning(f"Language detection failed for prompt: '{prompt[:50]}...'. Assuming non-English.")
+        return False
+
+# --- CACHE DE TRADUCCIONES ---
+@lru_cache(maxsize=512)
+def _gemini_translate(prompt: str) -> str:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(
+            f"Translate this image generation prompt to English. Keep exact meaning, style, and details. Respond ONLY with the translation:\n\n{prompt}"
+        )
+        translated = response.text.strip()
+        return translated if translated else prompt
+    except Exception as e:
+        logging.error(f"Gemini translation failed: {e}")
+        return prompt
+
+def translate_to_english(prompt: str) -> str:
+    if is_english(prompt):
+        logging.info(f"Prompt detected as English. Skipping translation.")
+        return prompt.strip()
+    return _gemini_translate(prompt.strip())
+
+# --- MEJORA + TRADUCCIÓN EN UNA SOLA LLAMADA ---
+def improve_and_translate_to_english(original_prompt: str) -> str:
+    if not GEMINI_API_KEY:
+        logging.warning("GEMINI_API_KEY not set. Using original prompt.")
+        return original_prompt
+
+    if is_english(original_prompt):
+        improve_prompt = original_prompt
+    else:
+        try:
+            genai.configure(api_key=GEMINI_API_KEY)
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            response = model.generate_content(
+                f"Improve this image prompt: add vivid, subtle details, optimize for high-quality AI generation. "
+                f"Keep original idea exactly. Then translate to English. "
+                f"Respond ONLY with the final English prompt. NO explanations.\n\nPrompt: {original_prompt}"
+            )
+            improve_prompt = response.text.strip()
+            logging.info(f"Improved & translated: '{original_prompt[:50]}...' → '{improve_prompt[:50]}...'")
+            return improve_prompt if improve_prompt else original_prompt
+        except Exception as e:
+            logging.error(f"Gemini improve+translate failed: {e}")
+            return original_prompt
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(
+            f"Improve this English image prompt: add vivid, subtle details, optimize for high-quality AI generation. "
+            f"Keep original idea exactly. Respond ONLY with the improved English prompt.\n\nPrompt: {improve_prompt}"
+        )
+        final = response.text.strip()
+        return final if final else improve_prompt
+    except Exception as e:
+        logging.error(f"Gemini improve (EN) failed: {e}")
+        return improve_prompt
+
+# --- PROMPT MÁGICO EN INGLÉS DIRECTO ---
+def generate_magic_prompt_in_english() -> str:
+    if not GEMINI_API_KEY:
+        logging.warning("GEMINI_API_KEY not set. Using fallback magic prompt.")
+        return "A surreal floating island with glowing waterfalls, ancient ruins, and a golden sky at sunset, ultra-detailed, cinematic lighting"
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(
+            "Generate ONE short (20-40 words) random image prompt in ENGLISH. Photorealistic or artistic style, vivid scenes. "
+            "Examples: 'A cat floating in space wearing an astronaut suit, Earth in background' or "
+            "'Hyperrealistic portrait of a woman with elaborate earrings, front lighting, full body'. "
+            "Include sensory and narrative details. Respond ONLY with the prompt."
+        )
+        magic_en = response.text.strip()
+        logging.info(f"Magic prompt generated (EN): '{magic_en[:100]}...'")
+        return magic_en if magic_en else "A majestic dragon soaring over a crystal lake at dawn, mist rising, ultra-realistic"
+    except Exception as e:
+        logging.error(f"Gemini magic prompt failed: {e}")
+        return "A cyberpunk city at night with neon lights reflecting on wet streets, flying cars, ultra-detailed"
+
+# --- RESTO SIN CAMBIOS ---
 def decode_token(token_b64):
     if not token_b64 or not token_b64.strip(): raise ValueError("El token está vacío.")
     decoded_str = base64.b64decode(token_b64.strip()).decode('utf-8')
@@ -44,7 +139,7 @@ def upload_image(bearer_token, x_client_data, pil_image, mime_type=None):
     
     try:
         response = requests.post(real_upload_url, headers=headers, json=payload, timeout=30)
-        response.encoding = 'utf-8'  # Ensure encoding to avoid bytes in json()
+        response.encoding = 'utf-8'
         if response.status_code == 200: 
             return ('success', response.json()["mediaGenerationId"]["mediaGenerationId"])
         else:
@@ -71,43 +166,6 @@ def create_blank_image(aspect_ratio_str):
     sizes = {"16:9": (1024, 576), "9:16": (576, 1024), "1:1": (512, 512), "4:3": (768, 576), "3:4": (576, 768)}
     return Image.new('RGB', sizes.get(aspect_ratio_str, (512, 512)), color='white')
 
-# Nueva función para mejorar el prompt con Gemini
-def improve_prompt_with_gemini(original_prompt):
-    if not GEMINI_API_KEY:
-        logging.warning("GEMINI_API_KEY no configurada para mejora de prompt - usando original.")
-        return original_prompt
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        response = model.generate_content(f"Responde SOLO con el prompt mejorado para generación de imágenes con IA de alta calidad. Mantén completamente la idea original sin agregar elementos nuevos o exagerados, solo refina con detalles sutiles, vívidos y optimizaciones mínimas para mejor resultado. NO agregues explicaciones, opciones ni texto adicional. Solo el prompt: {original_prompt}")
-        improved_prompt = response.text.strip()
-        logging.info(f"Mejora de prompt exitosa: '{original_prompt[:50]}...' → '{improved_prompt[:50]}...'")
-        if not improved_prompt:
-            return original_prompt  # Fallback si no hay respuesta
-        return improved_prompt
-    except Exception as e:
-        logging.error(f"Error al mejorar prompt con Gemini: {e}")
-        return original_prompt  # Fallback al original en caso de error
-
-# Nueva función para traducir prompt a inglés
-def translate_to_english(prompt):
-    key = GEMINI_API_KEY  # Usa la variable de config
-    if not key:
-        logging.warning("GEMINI_API_KEY no encontrada - usando prompt original para traducción.")
-        return prompt
-    try:
-        genai.configure(api_key=key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        response = model.generate_content(f"Traduce este prompt al inglés manteniendo el significado exacto y el estilo. Responde SOLO con la traducción: {prompt}")
-        translated = response.text.strip()
-        logging.info(f"Traducción exitosa: '{prompt[:50]}...' → '{translated[:50]}...'")
-        if not translated:
-            return prompt  # Fallback si no hay respuesta
-        return translated
-    except Exception as e:
-        logging.error(f"Error al traducir prompt a inglés: {e}")
-        return prompt  # Fallback al original en caso de error
-
 def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_type, ref_images, save_images_flag=False):
     import time
     logging.info(f"\n--- DEBUG: API Request ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ---")
@@ -131,7 +189,6 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
     logging.info(f"  Num Images: {num_images}, Seed: {seed}")
     logging.info(f"  Reference Images provided (count in data URLs): {len(ref_images)}")
     
-    # Create blank if no refs for ref models
     if model_type in ["R2I", "GEM_PIX"] and not ref_images:
         logging.info(f"{model_type} selected without reference images. Creating blank image.")
         blank_pil = create_blank_image(aspect_ratio_str)
@@ -173,7 +230,7 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
         start_time = time.time()
         response = requests.post(real_generate_url, headers=headers, json=payload, timeout=90)
         end_time = time.time()
-        response.encoding = 'utf-8'  # Ensure no bytes in text/json
+        response.encoding = 'utf-8'
         logging.info(f"  DEBUG: API request completed in {end_time - start_time:.2f} seconds, Status: {response.status_code}, Response (first 500 chars): {response.text[:500]}...")
         
         logging.info(f"--- DEBUG: API Response ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ---")
@@ -189,7 +246,6 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
                     return {'status': 'error', 'message': 'no_images_returned'}
                 
                 output_images_b64 = []
-                # ELIMINADO: No guardar en servidor. Removido el bloque if save_images_flag para os.makedirs y pil_image.save
 
                 for i, img_data in enumerate(generated_images_data):
                     if "encodedImage" in img_data:
@@ -198,12 +254,9 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
                             pil_image = Image.open(io.BytesIO(img_bytes))
                             img_b64 = base64.b64encode(img_bytes).decode('utf-8')
                             output_images_b64.append(f"data:image/png;base64,{img_b64}")
-                            
-                            # ELIMINADO: No guardar en servidor. Removidas las líneas de save_images_flag aquí
-                            
                         except Exception as e:
                             logging.error(f"  DEBUG: Error processing image {i}: {e}")
-                            continue  # Skip bad image
+                            continue
                     else:
                         logging.info(f"  DEBUG: Image {i} in response did not contain 'encodedImage'.")
 
