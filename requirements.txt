@@ -1,8 +1,8 @@
-Flask
-python-dotenv
-requests
-Pillow
-gunicorn
-Flask-Session # <--- ¡Nuevo!
-google.generativeai
-langdetect
+Flask==3.1.2
+python-dotenv==1.2.1
+requests==2.32.5
+Pillow==12.0.0
+gunicorn==23.0.0
+Flask-Session==0.8.0
+google-generativeai==0.8.5
+langdetect==1.0.9
