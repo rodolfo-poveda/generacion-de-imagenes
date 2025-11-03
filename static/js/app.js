@@ -72,6 +72,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const imageModal = document.getElementById('image-modal');
     const modalImage = document.getElementById('modal-image');
 
+    // CAMERA MODAL ELEMENTS
+    const cameraModal = document.getElementById('camera-modal');
+    const openCameraButton = document.getElementById('open-camera-button');
+    const cameraStream = document.getElementById('camera-stream');
+    const captureButton = document.getElementById('capture-button');
+    let currentCameraStream = null;
+
     if (!generateButton || !resultsContainer) {
         //console.error("Error: Elemento(s) crítico(s) no encontrado(s) en el DOM. La aplicación no puede funcionar correctamente.");
         return;
@@ -99,10 +106,69 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Cerrar modal con tecla ESC
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && imageModal && imageModal.style.display === 'block') {
+        if (e.key === 'Escape' && imageModal && imageModal.style.display === 'flex') {
             window.closeImageModal();
         }
+        if (e.key === 'Escape' && cameraModal && cameraModal.style.display === 'flex') {
+            window.closeCameraModal();
+        }
     });
+
+    // FUNCIONES DEL MODAL DE CÁMARA
+    window.openCameraModal = async function() {
+        if (!cameraModal || !cameraStream) return;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showMessage(errorMessage, "Tu navegador no soporta el acceso a la cámara.");
+            return;
+        }
+        hideMessages();
+        try {
+            // Preferir la cámara trasera
+            const constraints = { video: { facingMode: { exact: "environment" } } };
+            currentCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err) {
+            // Si la trasera falla, intentar con cualquiera
+            try {
+                 const constraints = { video: true };
+                 currentCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+            } catch (error) {
+                showMessage(errorMessage, "No se pudo acceder a la cámara. Revisa los permisos.");
+                return;
+            }
+        }
+        cameraStream.srcObject = currentCameraStream;
+        cameraModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    };
+
+    window.closeCameraModal = function() {
+        if (currentCameraStream) {
+            currentCameraStream.getTracks().forEach(track => track.stop());
+        }
+        if (cameraModal) {
+            cameraModal.style.display = 'none';
+        }
+        document.body.style.overflow = 'auto';
+    };
+    
+    if (openCameraButton) {
+        openCameraButton.addEventListener('click', window.openCameraModal);
+    }
+    
+    if (captureButton) {
+        captureButton.addEventListener('click', async () => {
+            if (!cameraStream) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = cameraStream.videoWidth;
+            canvas.height = cameraStream.videoHeight;
+            canvas.getContext('2d').drawImage(cameraStream, 0, 0, canvas.width, canvas.height);
+            const imageDataUrl = canvas.toDataURL('image/jpeg');
+            
+            await window.addReferenceImage(imageDataUrl, null, true);
+            window.closeCameraModal();
+        });
+    }
+
 
     function showMessage(element, message, type = 'error') {
         if (!element) return;
@@ -576,6 +642,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const availableSlots = maxReferences - currentReferenceImages.length;
         if (availableSlotsSpan) availableSlotsSpan.textContent = availableSlots;
         if (referenceUploaderSection) referenceUploaderSection.style.display = availableSlots > 0 ? 'block' : 'none';
+        if (openCameraButton) openCameraButton.style.display = availableSlots > 0 ? 'block' : 'none';
 
         const modelType = window.MODEL_DISPLAY_NAMES_JS[activeModelDisplayName];
         const isRefModel = ["R2I", "GEM_PIX"].includes(modelType);

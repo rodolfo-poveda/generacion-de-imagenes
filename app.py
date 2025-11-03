@@ -141,27 +141,27 @@ def generate_images():
         return jsonify({'status': 'success', 'images': result['images']})
     else:
         detailed_error_messages = {
-            "minor_upload_error": "La imagen de referencia podría contener contenido inapropiado (ej. menores, contenido explícito). Por favor, usa otra imagen.",
-            "prominent_people_error": "La imagen de referencia contiene personas prominentes o contenido sensible. Por favor, usa otra imagen.",
-            "child_exploitation_error": "Contenido de explotación infantil detectado en la imagen de referencia. Esta acción está estrictamente prohibida.",
-            "harmful_content_error": "La imagen de referencia contiene contenido dañino. Por favor, usa otra imagen.",
-            "generic_upload_error": "Error al procesar la imagen de referencia. Asegúrate de que sea una imagen válida y no esté dañada.",
-            "image_too_large": "La imagen de referencia es demasiado grande. El tamaño máximo permitido es 10MB.",
-            "upload_failed: no_media_ids": "Fallo interno: No se pudieron subir las imágenes de referencia. Intenta de nuevo.", 
-            "unsafe_generation_error": "Tu descripción infringe las políticas de contenido seguro (ej. menores, contenido explícito, violento). Por favor, modifica tu prompt.",
-            "minors_error": "Contenido relacionado con menores o de naturaleza sensible en la descripción. Por favor, ajusta tu prompt.",
-            "sexual_error": "Contenido de naturaleza sexual en la descripción. Por favor, ajusta tu prompt.",
-            "violence_error": "Contenido violento o gráfico en la descripción. Por favor, ajusta tu prompt.",
-            "criminal_error": "Contenido relacionado con actividades criminales en la descripción. Por favor, ajusta tu prompt.",
-            "no_images_returned": "La IA no pudo generar imágenes para tu descripción. Intenta con un prompt diferente.",
-            "auth_error": f"Error de autenticación: Tu sesión ha caducado o es inválida. Vuelve a cargar la página e inténtalo de nuevo. Detalles: {result['message'].split(':', 1)[1].strip() if ':' in result['message'] else result['message']}",
-            "connection_error: timeout": "La conexión con la IA se agotó (timeout). Revisa tu conexión a internet o intenta más tarde.",
-            "connection_error": "Error de conexión con el servidor de IA. Revisa tu conexión a internet e inténtalo de nuevo.",
-            "generic_api_error: invalid_json": "La respuesta de la IA no es válida. Intenta de nuevo.",
-            "generic_api_error: non_json_error_response": "La IA devolvió un error inesperado en el formato. Intenta de nuevo.",
-            "internal_config_error": "Error de configuración interna de la aplicación. Por favor, contacta al soporte.", 
-            "no_image_provided": "No se proporcionó ninguna imagen para subir. Esto es un error interno.", 
-            "generic_api_error": "La IA devolvió un error interno. Intenta de nuevo o con un prompt/imagen diferente."
+            "minor_upload_error": "La imagen de referencia no pudo ser procesada. Podría infringir las políticas de contenido (menores, contenido explícito). Prueba con otra imagen.",
+            "prominent_people_error": "La imagen de referencia parece contener personas famosas o contenido sensible. Por favor, intenta con una imagen diferente.",
+            "child_exploitation_error": "Se ha detectado contenido inaceptable en la imagen. Esta acción está estrictamente prohibida y no será procesada.",
+            "harmful_content_error": "La imagen de referencia parece contener elementos dañinos y no puede ser procesada. Por favor, usa otra.",
+            "generic_upload_error": "Hubo un problema al subir tu imagen. Asegúrate de que es un archivo válido (JPG/PNG) y no está dañado.",
+            "image_too_large": "¡La imagen es muy grande! Por favor, intenta con una imagen de menos de 10MB.",
+            "upload_failed: no_media_ids": "Ocurrió un error al subir la imagen de referencia. Por favor, inténtalo de nuevo.",
+            "unsafe_generation_error": "Tu descripción parece infringir las políticas de contenido seguro. Por favor, modifica el texto para continuar.",
+            "minors_error": "Tu descripción contiene elementos que no se pueden procesar (contenido sensible, etc.). Por favor, ajústala.",
+            "sexual_error": "Tu descripción contiene elementos que no se pueden procesar (contenido sensible, etc.). Por favor, ajústala.",
+            "violence_error": "Tu descripción contiene elementos que no se pueden procesar (contenido violento, etc.). Por favor, ajústala.",
+            "criminal_error": "Tu descripción contiene elementos que no se pueden procesar (actividades ilegales, etc.). Por favor, ajústala.",
+            "no_images_returned": "La IA no pudo generar un resultado para tu descripción. ¡Intenta ser más específico o prueba con una idea diferente!",
+            "auth_error": "Tu sesión parece haber caducado. Por favor, recarga la página para continuar.",
+            "connection_error: timeout": "La solicitud tardó demasiado en responder. Esto puede pasar con imágenes muy pesadas o una conexión lenta. Inténtalo de nuevo.",
+            "connection_error": "No se pudo conectar con el servidor de IA. Revisa tu conexión a internet y vuelve a intentarlo.",
+            "generic_api_error: invalid_json": "Ocurrió un error inesperado con la IA. Por favor, inténtalo de nuevo.",
+            "generic_api_error: non_json_error_response": "Ocurrió un error inesperado con la IA. Por favor, inténtalo de nuevo.",
+            "internal_config_error": "Hay un problema de configuración en la aplicación. El administrador ha sido notificado.",
+            "no_image_provided": "Error interno: no se encontró la imagen a procesar. Intenta subirla de nuevo.",
+            "generic_api_error": "Ocurrió un error inesperado con la IA. Si el problema persiste, prueba con una descripción o imagen diferente."
         }
         
         message_key = result['message']

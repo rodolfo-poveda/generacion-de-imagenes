@@ -927,3 +927,23 @@ footer {
     border-color: var(--primary-color);
     font-weight: 600;
 }
+
+/* Estilos para el Modal de la Cámara */
+#camera-modal-content {
+    flex-direction: column;
+    max-width: 90vw; /* Limita el ancho en pantallas grandes */
+    width: 640px; /* Ancho base */
+    max-height: 90vh;
+}
+
+#camera-stream {
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    background-color: #000; /* Fondo negro por si la cámara tarda en iniciar */
+}
+
+#camera-controls {
+    margin-top: 1rem;
+    text-align: center;
+}
