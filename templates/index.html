@@ -148,8 +148,9 @@
         <span class="close-modal" onclick="window.closeCameraModal()">&times;</span>
         <div id="camera-modal-content" class="image-modal-content">
             <video id="camera-stream" style="width: 100%; border-radius: 12px;" autoplay playsinline></video>
-            <div id="camera-controls" style="text-align: center; margin-top: 1rem;">
-                <button id="capture-button" class="primary-button" style="width: auto; padding: 0.9rem 2.5rem;">Capturar</button>
+            <div id="camera-controls">
+                <button id="flip-camera-button" class="secondary-button" style="display: none;" aria-label="Girar cámara">🔄</button>
+                <button id="capture-button" class="primary-button">Capturar</button>
             </div>
         </div>
     </div>

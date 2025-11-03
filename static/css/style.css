@@ -944,6 +944,25 @@ footer {
 }
 
 #camera-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
     margin-top: 1rem;
-    text-align: center;
+}
+
+#camera-controls #capture-button {
+    width: auto;
+    padding: 0.9rem 2.5rem;
+    margin-top: 0;
+}
+
+#flip-camera-button {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    padding: 0;
+    font-size: 1.5rem;
+    margin-top: 0;
+    flex-shrink: 0;
 }

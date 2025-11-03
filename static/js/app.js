@@ -77,7 +77,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const openCameraButton = document.getElementById('open-camera-button');
     const cameraStream = document.getElementById('camera-stream');
     const captureButton = document.getElementById('capture-button');
+    const flipCameraButton = document.getElementById('flip-camera-button');
     let currentCameraStream = null;
+    let currentFacingMode = 'environment'; // 'environment' para trasera, 'user' para frontal
 
     if (!generateButton || !resultsContainer) {
         //console.error("Error: Elemento(s) crítico(s) no encontrado(s) en el DOM. La aplicación no puede funcionar correctamente.");
@@ -114,32 +116,61 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // FUNCIONES DEL MODAL DE CÁMARA
-    window.openCameraModal = async function() {
+    // --- LÓGICA DE LA CÁMARA ---
+
+    async function startCameraStream(facingMode) {
+        if (currentCameraStream) {
+            currentCameraStream.getTracks().forEach(track => track.stop());
+        }
+        
+        const constraints = { video: { facingMode: { exact: facingMode } } };
+
+        try {
+            currentCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err) {
+            // Si 'exact' falla (ej. en desktop), intentar con cualquier cámara
+            try {
+                const fallbackConstraints = { video: true };
+                currentCameraStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+            } catch (error) {
+                showMessage(errorMessage, "No se pudo acceder a la cámara. Revisa los permisos.");
+                return false;
+            }
+        }
+        
+        cameraStream.srcObject = currentCameraStream;
+        currentFacingMode = facingMode; // Actualizar estado
+        return true;
+    }
+
+    async function openCameraModal() {
         if (!cameraModal || !cameraStream) return;
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             showMessage(errorMessage, "Tu navegador no soporta el acceso a la cámara.");
             return;
         }
+
         hideMessages();
+
+        // Comprobar si hay múltiples cámaras para mostrar el botón de girar
         try {
-            // Preferir la cámara trasera
-            const constraints = { video: { facingMode: { exact: "environment" } } };
-            currentCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-        } catch (err) {
-            // Si la trasera falla, intentar con cualquiera
-            try {
-                 const constraints = { video: true };
-                 currentCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-            } catch (error) {
-                showMessage(errorMessage, "No se pudo acceder a la cámara. Revisa los permisos.");
-                return;
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoInputs = devices.filter(device => device.kind === 'videoinput');
+            if (videoInputs.length > 1 && flipCameraButton) {
+                flipCameraButton.style.display = 'inline-flex';
+            } else if (flipCameraButton) {
+                flipCameraButton.style.display = 'none';
             }
+        } catch (error) {
+            // No hacer nada si falla, simplemente no se mostrará el botón
         }
-        cameraStream.srcObject = currentCameraStream;
-        cameraModal.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-    };
+
+        const streamStarted = await startCameraStream(currentFacingMode);
+        if (streamStarted) {
+            cameraModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+    }
 
     window.closeCameraModal = function() {
         if (currentCameraStream) {
@@ -150,22 +181,37 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         document.body.style.overflow = 'auto';
     };
-    
+
     if (openCameraButton) {
-        openCameraButton.addEventListener('click', window.openCameraModal);
+        openCameraButton.addEventListener('click', openCameraModal);
     }
-    
+
     if (captureButton) {
         captureButton.addEventListener('click', async () => {
-            if (!cameraStream) return;
+            if (!cameraStream.srcObject) return;
             const canvas = document.createElement('canvas');
             canvas.width = cameraStream.videoWidth;
             canvas.height = cameraStream.videoHeight;
-            canvas.getContext('2d').drawImage(cameraStream, 0, 0, canvas.width, canvas.height);
+            const context = canvas.getContext('2d');
+            
+            // Si la cámara es frontal, voltear la imagen horizontalmente para que no se vea en modo espejo
+            if (currentFacingMode === 'user') {
+                context.translate(canvas.width, 0);
+                context.scale(-1, 1);
+            }
+
+            context.drawImage(cameraStream, 0, 0, canvas.width, canvas.height);
             const imageDataUrl = canvas.toDataURL('image/jpeg');
             
             await window.addReferenceImage(imageDataUrl, null, true);
             window.closeCameraModal();
+        });
+    }
+
+    if (flipCameraButton) {
+        flipCameraButton.addEventListener('click', () => {
+            const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            startCameraStream(newFacingMode);
         });
     }
 
