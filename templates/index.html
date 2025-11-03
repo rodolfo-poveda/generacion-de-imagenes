@@ -107,6 +107,7 @@
                      Sube hasta <span id="available-slots">3</span> imágenes
                  </label>
                  <input type="file" id="reference-file-uploader" accept="image/jpeg, image/png" multiple style="display: none;">
+                 <button id="camera-capture-button" class="secondary-button" style="width: 100%; margin-top: 0.5rem;">📷 Capturar con Cámara</button>
             </div>
         </div>
         {% endif %}
@@ -130,6 +131,20 @@
         <footer>
             <p>AI Image Generator Pro © 2025</p>
         </footer>
+    </div>
+
+    <!-- NUEVO: MODAL PARA CÁMARA -->
+    <div id="camera-modal" class="camera-modal">
+        <div class="camera-modal-content">
+            <span class="close-camera" onclick="window.closeCameraModal()">&times;</span>
+            <video id="camera-video" autoplay playsinline></video>
+            <canvas id="capture-canvas"></canvas>
+            <div class="camera-buttons">
+                <button id="start-camera-btn">Iniciar Cámara</button>
+                <button id="capture-btn" style="display: none;">📸 Capturar</button>
+                <button id="cancel-camera-btn" onclick="window.closeCameraModal()">Cancelar</button>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>

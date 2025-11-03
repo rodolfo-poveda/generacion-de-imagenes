@@ -1,4 +1,4 @@
-// static/js/app.js - VERSIÓN CORREGIDA PARA EXPANDER DE MODELOS (SIN RADIOS)
+// static/js/app.js - VERSIÓN CORREGIDA PARA EXPANDER DE MODELOS (SIN RADIOS) CON MEJORAS EN ERRORES Y CÁMARA
 
 document.addEventListener('DOMContentLoaded', function() {
     const body = document.body;
@@ -26,6 +26,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const referenceUploaderSection = document.getElementById('reference-uploader-section');
     const generateButton = document.getElementById('generate-button');
     const clearResultsButton = document.getElementById('clear-results-button');
+    const cameraCaptureButton = document.getElementById('camera-capture-button');  // NUEVO: Para botón de cámara
+
+    // NUEVO: Elementos de cámara
+    const cameraModal = document.getElementById('camera-modal');
+    const cameraVideo = document.getElementById('camera-video');
+    const captureCanvas = document.getElementById('capture-canvas');
+    const startCameraBtn = document.getElementById('start-camera-btn');
+    const captureBtn = document.getElementById('capture-btn');
+    const cancelCameraBtn = document.getElementById('cancel-camera-btn');
 
     // CAMBIO CLAVE: Detectar modelo activo desde expander header (no radios)
     function getActiveModelName() {
@@ -39,7 +48,8 @@ document.addEventListener('DOMContentLoaded', function() {
         generateButton,
         improvePromptButton,
         magicPromptButton,
-        clearResultsButton
+        clearResultsButton,
+        cameraCaptureButton  // NUEVO: Incluye botón de cámara
     ].filter(btn => btn);  // Filtra solo los que existen (sin radios)
 
     // Función para bloquear todos los botones interactivos
@@ -73,12 +83,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const modalImage = document.getElementById('modal-image');
 
     if (!generateButton || !resultsContainer) {
-        //console.error("Error: Elemento(s) crítico(s) no encontrado(s) en el DOM. La aplicación no puede funcionar correctamente.");
+        console.error("Error: Elemento(s) crítico(s) no encontrado(s) en el DOM. La aplicación no puede funcionar correctamente.");
         return;
     }
 
     let currentReferenceImages = window.initialSessionState.reference_images_list || [];
     let activeModelDisplayName = getActiveModelName();  // Inicial desde DOM o session
+    let mediaStream = null;  // NUEVO: Para trackear stream de cámara
 
     // FUNCIONES DEL MODAL PARA AMPLIAR IMÁGENES
     window.openImageModal = function(imageSrc) {
@@ -97,21 +108,103 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-    // Cerrar modal con tecla ESC
+    // NUEVO: FUNCIONES PARA CÁMARA
+    window.openCameraModal = function() {
+        if (cameraModal) {
+            cameraModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+    };
+
+    window.closeCameraModal = function() {
+        if (cameraModal) {
+            cameraModal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+            mediaStream = null;
+            cameraVideo.srcObject = null;
+        }
+        if (startCameraBtn) startCameraBtn.style.display = 'inline-block';
+        if (captureBtn) captureBtn.style.display = 'none';
+    };
+
+    // Inicializar cámara
+    if (startCameraBtn) {
+        startCameraBtn.addEventListener('click', async () => {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user' }  // Front-facing para mobile
+                });
+                cameraVideo.srcObject = mediaStream;
+                startCameraBtn.style.display = 'none';
+                captureBtn.style.display = 'inline-block';
+            } catch (err) {
+                showMessage(errorMessage, '😊 No pudimos acceder a la cámara. Verifica permisos o usa subida de archivo.', 'warning');
+                console.error('Camera error:', err);
+            }
+        });
+    }
+
+    // Capturar foto
+    if (captureBtn) {
+        captureBtn.addEventListener('click', () => {
+            const ctx = captureCanvas.getContext('2d');
+            captureCanvas.width = cameraVideo.videoWidth;
+            captureCanvas.height = cameraVideo.videoHeight;
+            ctx.drawImage(cameraVideo, 0, 0);
+            const imageDataUrl = captureCanvas.toDataURL('image/jpeg', 0.8);  // JPEG 80% para reducir tamaño
+            window.addReferenceImage(imageDataUrl, null, true);
+            window.closeCameraModal();
+        });
+    }
+
+    // Event listener para botón de cámara
+    if (cameraCaptureButton) {
+        cameraCaptureButton.addEventListener('click', () => {
+            if (currentReferenceImages.length >= 3) {
+                showMessage(errorMessage, '😌 Límite de 3 referencias alcanzado. Elimina una primero.', 'warning');
+                return;
+            }
+            window.openCameraModal();
+        });
+    }
+
+    // Cerrar modal con tecla ESC (para ambos modales)
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && imageModal && imageModal.style.display === 'block') {
-            window.closeImageModal();
+        if (e.key === 'Escape') {
+            if (imageModal && imageModal.style.display === 'flex') {
+                window.closeImageModal();
+            }
+            if (cameraModal && cameraModal.style.display === 'flex') {
+                window.closeCameraModal();
+            }
         }
     });
 
+    // MEJORADO: showMessage con tipos suaves y botón reintentar para timeouts
     function showMessage(element, message, type = 'error') {
         if (!element) return;
-        element.textContent = message;
+        // Detectar si es timeout/conexión para agregar botón reintentar
+        let retryBtn = '';
+        if (type.includes('timeout') || type.includes('connection') || message.includes('timeout') || message.includes('conexión')) {
+            retryBtn = '<br><button onclick="window.retryGeneration()" style="margin-top: 0.5rem; padding: 0.4rem 0.8rem; background: var(--primary-gradient); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem;">🔄 Reintentar</button>';
+        }
+        element.innerHTML = `${message}${retryBtn}`;
         element.style.display = 'block';
-        element.className = `${type}-message`;
+        element.className = type === 'warning' ? 'warning-message' : `${type}-message`;  // Nueva clase warning para errores suaves
         clearTimeout(element.hideTimeout);
-        element.hideTimeout = setTimeout(() => { element.style.display = 'none'; }, 8000);
+        element.hideTimeout = setTimeout(() => { element.style.display = 'none'; }, 10000);  // Aumentado a 10s para más tiempo de lectura
     }
+
+    // NUEVO: Función para reintentar generación (llama al handler de generate)
+    window.retryGeneration = function() {
+        hideMessages();
+        if (generateButton && !isProcessing) {
+            generateButton.click();  // Simula click para reintentar
+        }
+    };
 
     function hideMessages() {
         if (errorMessage && errorMessage.hideTimeout) clearTimeout(errorMessage.hideTimeout);
@@ -147,10 +240,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.status === 'success') {
                 window.location.reload(); 
             } else {
-                showMessage(errorMessage, data.message);
+                showMessage(errorMessage, data.message, 'warning');  // Usar warning para tabs suaves
             }
         } catch (error) {
-            showMessage(errorMessage, 'Error al cambiar de modelo. Inténtalo de nuevo.');
+            showMessage(errorMessage, '😊 Error al cambiar de modelo. Recarga la página si persiste.', 'warning');
             //console.error('Fetch error on tab change:', error);
         } finally {
             if (loadingSpinner) loadingSpinner.style.display = 'none';
@@ -176,7 +269,7 @@ document.addEventListener('DOMContentLoaded', function() {
             event.preventDefault();
             const prompt = promptTextarea ? promptTextarea.value.trim() : '';
             if (!prompt) {
-                showMessage(errorMessage, "⚠️ Escribe un prompt para mejorar.");
+                showMessage(errorMessage, "⚠️ Escribe un prompt para mejorar.", 'warning');
                 return;
             }
             hideMessages();
@@ -193,10 +286,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     promptTextarea.value = data.improved_prompt;
                     showMessage(successMessage, '🎉 Prompt mejorado y actualizado.', 'success');
                 } else {
-                    showMessage(errorMessage, data.message);
+                    showMessage(errorMessage, data.message, 'warning');
                 }
             } catch (error) {
-                showMessage(errorMessage, '❌ Error de conexión al mejorar prompt. Inténtalo de nuevo.');
+                showMessage(errorMessage, '❌ Error de conexión al mejorar prompt. Inténtalo de nuevo.', 'warning');
                 //console.error('Fetch error on improve_prompt:', error);
             } finally {
                 improvePromptButton.disabled = false;
@@ -223,10 +316,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     promptTextarea.value = data.magic_prompt;
                     showMessage(successMessage, '🎉 ¡Prompt mágico generado y listo para usar!', 'success');
                 } else {
-                    showMessage(errorMessage, data.message);
+                    showMessage(errorMessage, data.message, 'warning');
                 }
             } catch (error) {
-                showMessage(errorMessage, '❌ Error de conexión al generar prompt mágico. Inténtalo de nuevo.');
+                showMessage(errorMessage, '❌ Error de conexión al generar prompt mágico. Inténtalo de nuevo.', 'warning');
                 //console.error('Fetch error on magic_prompt:', error);
             } finally {
                 magicPromptButton.disabled = false;
@@ -234,222 +327,122 @@ document.addEventListener('DOMContentLoaded', function() {
                 enableAllButtons();
             }
         });
-    } 
-
-    // Función para generar imágenes (extraída para reutilizar en inicial)
-    async function performGenerate(prompt, num_images, seed, aspect_ratio, model_name_display, save_images, reference_images) {
-        try {
-            const response = await fetch('/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: prompt,
-                    num_images: num_images,
-                    seed: seed,
-                    aspect_ratio: aspect_ratio,
-                    model_name_display: model_name_display,
-                    save_images: save_images,
-                    reference_images: reference_images
-                }),
-            });
-
-            const responseText = await response.text(); 
-            
-            let result;
-            try {
-                result = JSON.parse(responseText); 
-            } catch (jsonError) {
-                throw new Error("Failed to parse JSON response from server."); 
-            }
-
-            if (response.ok && result.status === 'success') {
-                window.initialSessionState.results = result.images; 
-                renderGeneratedImages(result.images); 
-                showMessage(successMessage, `🎉 ¡${result.images.length} imagen(es) generada(s)!`, 'success');
-                window.initialSessionState.save_images = save_images; 
-                updateFooterSaveMessage(result.images.length > 0);
-
-                // NUEVO: Auto-descarga si save_images es true
-                if (save_images) {
-                    setTimeout(() => {
-                        result.images.forEach((imgDataUrl, index) => {
-                            downloadImage(imgDataUrl, index + 1);
-                        });
-                        showMessage(successMessage, `🎉 ${result.images.length} imágenes descargadas automáticamente.`, 'success');
-                    }, 500);  // Delay para que el DOM se renderice
-                }
-
-                if (clearResultsButton) clearResultsButton.style.display = 'block';
-                return true;
-            } else {
-                showMessage(errorMessage, result.message || 'Error desconocido al generar imágenes.');
-                showInitialMessage();
-                updateFooterSaveMessage(false);
-                if (clearResultsButton) clearResultsButton.style.display = 'none';
-                return false;
-            }
-        } catch (error) {
-            showMessage(errorMessage, 'Error de conexión con el servidor. Inténtalo de nuevo.');
-            showInitialMessage();
-            updateFooterSaveMessage(false);
-            if (clearResultsButton) clearResultsButton.style.display = 'none';
-            return false;
-        }
     }
 
-    generateButton.addEventListener('click', async function(event) {
-        event.preventDefault();
-
-        hideMessages();
-        // Mostrar el spinner en el área principal
-        if (loadingSpinner) loadingSpinner.style.display = 'block';
-        resultsContainer.innerHTML = ''; // Limpiar el área de resultados
-        if (mainResultsTitle) mainResultsTitle.textContent = '🎨 Tus Creaciones';
-        if (clearResultsButton) clearResultsButton.style.display = 'none';
-
-        // Scroll suave a resultados en móviles después de iniciar generación
-        if (window.innerWidth < 768) {
-            const resultsTitle = document.getElementById('main-results-title');
-            if (resultsTitle) {
-                resultsTitle.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }        
-
-        const prompt = promptTextarea ? promptTextarea.value : '';
-        const num_images = numImagesSlider ? numImagesSlider.value : 4; 
-        const seed = seedInput ? seedInput.value : -1;
-        const aspect_ratio = aspectRatioSelect ? aspectRatioSelect.value : '1:1';
-        // CAMBIO CLAVE: Usar getActiveModelName() en lugar de radios
-        const model_name_display = getActiveModelName();
-        const save_images = saveImagesCheckbox ? saveImagesCheckbox.checked : false;
-
-        if (!prompt.trim()) {
-            showMessage(errorMessage, "⚠️ Por favor, escribe una descripción.");
-            if (loadingSpinner) loadingSpinner.style.display = 'none';
-            showInitialMessage();
-            return;
-        }
-
-        disableAllButtons();
-        try {
-            await performGenerate(prompt, num_images, seed, aspect_ratio, model_name_display, save_images, currentReferenceImages);
-        } finally {
-            // Ocultar el spinner al finalizar
-            if (loadingSpinner) loadingSpinner.style.display = 'none';
-            enableAllButtons();
-        }
-    });
-
-    function renderGeneratedImages(images) {
-        if (!resultsContainer) return;
-        resultsContainer.innerHTML = '';
-        if (mainResultsTitle) mainResultsTitle.textContent = '🎨 Tus Creaciones';
-
-        if (images.length === 0) {
-            //console.warn("--- DEBUG (CLIENT): renderGeneratedImages: No images to render, showing initial message. ---");
-            showInitialMessage();
-            if (clearResultsButton) clearResultsButton.style.display = 'none';
-            return;
-        }
-        //console.log("--- DEBUG (CLIENT): renderGeneratedImages: Rendering", images.length, "images. ---");
-
-        resultsContainer.classList.remove('cols-1', 'cols-2', 'cols-3', 'cols-4');
-        if (images.length === 1) {
-            resultsContainer.classList.add('cols-1');
-        } else if (images.length === 2) {
-            resultsContainer.classList.add('cols-2');
-        } else if (images.length === 3) {
-            resultsContainer.classList.add('cols-3');
-        } else if (images.length === 4) {
-            resultsContainer.classList.add('cols-4');
-        } else {
-            resultsContainer.classList.add('cols-4'); 
-        }
-
-        images.forEach((img_data_url, index) => {
-            const card = document.createElement('div');
-            card.className = 'result-card';
-
-            const modelType = window.MODEL_DISPLAY_NAMES_JS[activeModelDisplayName];
-            const isRefModel = ["R2I", "GEM_PIX"].includes(modelType);
-
-            let actionButtonsHtml;
-            if (isRefModel) {
-                actionButtonsHtml = `
-                    <button onclick="window.addReferenceImage('${img_data_url}', null, true)">➕ Añadir</button>
-                `;
-            } else {
-                actionButtonsHtml = `
-                    <div class="popover-container">
-                        <button class="popover-button" onclick="window.togglePopover(this)">🎨 Usar en...</button>
-                        <div class="popover-content">
-                            <button onclick="window.addReferenceImage('${img_data_url}', '${window.MODEL_NAMES_LIST_JS[2]}')">${window.MODEL_NAMES_LIST_JS[2]}</button>
-                            <button onclick="window.addReferenceImage('${img_data_url}', '${window.MODEL_NAMES_LIST_JS[3]}')">${window.MODEL_NAMES_LIST_JS[3]}</button>
-                        </div>
-                    </div>
-                `;
-            }
-
-            if (!img_data_url || !img_data_url.startsWith('data:image/')) {
-                //console.error(`--- DEBUG (CLIENT): Image ${index} has invalid data URL:`, img_data_url ? img_data_url.substring(0, 100) + "..." : "empty/null");
-                card.innerHTML = `<div style="color:red; text-align:center; padding:1rem;">Error: Imagen generada inválida o corrupta.</div>`;
-            } else {
-                 card.innerHTML = `
-                    <img src="${img_data_url}" alt="Generated Image ${index + 1}" class="clickable-image">
-                    <div class="action-row">
-                        <div class="action-col">
-                            ${actionButtonsHtml}
-                        </div>
-                        <div class="download-col">
-                            <button class="download-button" onclick="downloadImage('${img_data_url}', ${index + 1})">📥</button>
-                        </div>
-                    </div>
-                `;
-                // AGREGAR EVENT LISTENER PARA MODAL (EVITA ESCAPING EN INNERHTML)
-                const imgElement = card.querySelector('.clickable-image');
-                if (imgElement) {
-                    imgElement.addEventListener('click', () => window.openImageModal(img_data_url));
-                    imgElement.style.cursor = 'pointer'; // Indicador visual
-                }
-            }
-           
-            resultsContainer.appendChild(card);
-        });
-
-        if (clearResultsButton) clearResultsButton.style.display = 'block';
-    }
-
+    // Handler para clear results
     if (clearResultsButton) {
-        clearResultsButton.addEventListener('click', async function() {
+        clearResultsButton.addEventListener('click', async function(event) {
+            event.preventDefault();
             hideMessages();
             disableAllButtons();
             try {
-                const response = await fetch('/clear_session_results', { method: 'POST' });
+                const response = await fetch('/clear_session_results', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
                 const data = await response.json();
                 if (data.status === 'success') {
-                    window.initialSessionState.results = []; 
-                    // Resetear elementos UI después del clear
-                    if (aspectRatioSelect) aspectRatioSelect.selectedIndex = 0;
-                    if (saveImagesCheckbox) saveImagesCheckbox.checked = false;
-                    currentReferenceImages = [];
-                    renderReferenceImages();
-                    showInitialMessage();
-                    if (promptTextarea) promptTextarea.value = '';  // <-- NUEVO: Limpia el textarea
-                    updateFooterSaveMessage(false);
-                    if (clearResultsButton) clearResultsButton.style.display = 'none';
-                    showMessage(successMessage, "Interfaz reseteada completamente.", 'success');
+                    window.location.reload();
                 } else {
-                    showMessage(errorMessage, data.message || "Error al resetear interfaz en el servidor.");
+                    showMessage(errorMessage, 'No se pudo resetear. Recarga manualmente.', 'warning');
                 }
             } catch (error) {
-                //console.error("Error calling /clear_session_results:", error);
-                showMessage(errorMessage, "Error de conexión al resetear interfaz.");
+                showMessage(errorMessage, 'Error al resetear. Recarga la página.', 'warning');
+                //console.error('Fetch error on clear:', error);
             } finally {
                 enableAllButtons();
             }
         });
     }
 
+    // Handler para generar imágenes (MEJORADO para timeouts y errores suaves)
+    if (generateButton) {
+        generateButton.addEventListener('click', async function(event) {
+            event.preventDefault();
+            const prompt = promptTextarea ? promptTextarea.value.trim() : '';
+            if (!prompt) {
+                showMessage(errorMessage, '😌 Escribe una descripción para empezar la magia.', 'warning');
+                return;
+            }
+            hideMessages();
+            disableAllButtons();
+            generateButton.textContent = '🚀 Generando...';
+            if (loadingSpinner) loadingSpinner.style.display = 'block';
+
+            const formData = {
+                prompt: prompt,
+                num_images: numImagesSlider ? numImagesSlider.value : 4,
+                seed: seedInput ? seedInput.value : -1,
+                aspect_ratio: aspectRatioSelect ? aspectRatioSelect.value : '1:1',
+                model_name_display: activeModelDisplayName,
+                save_images: saveImagesCheckbox ? saveImagesCheckbox.checked : false,
+                reference_images: currentReferenceImages
+            };
+
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    renderGeneratedImages(data.images);
+                    updateFooterSaveMessage(true);
+                    if (data.images && data.images.length > 0 && saveImagesCheckbox && saveImagesCheckbox.checked) {
+                        setTimeout(() => {
+                            data.images.forEach((imgDataUrl, index) => {
+                                downloadImage(imgDataUrl, index + 1);
+                            });
+                        }, 500);
+                    }
+                    showMessage(successMessage, `🎉 ¡${data.images.length} imágenes listas! Explora y crea más.`, 'success');
+                    if (clearResultsButton) clearResultsButton.style.display = 'block';
+                } else {
+                    // Detectar timeouts/conexiones para tipo 'warning' y botón reintentar
+                    let msgType = 'error';
+                    if (data.message.includes('timeout') || data.message.includes('connection')) {
+                        msgType = 'warning';
+                    }
+                    showMessage(errorMessage, data.message, msgType);
+                }
+            } catch (error) {
+                showMessage(errorMessage, '🌐 Conexión pausada. Verifica internet y reintenta. 😊', 'warning');
+                console.error('Fetch error on generate:', error);
+            } finally {
+                generateButton.textContent = '🚀 Generar Imágenes';
+                if (loadingSpinner) loadingSpinner.style.display = 'none';
+                enableAllButtons();
+            }
+        });
+    }
+
+    // Función para renderizar imágenes generadas
+    function renderGeneratedImages(images) {
+        if (!resultsContainer) return;
+        resultsContainer.innerHTML = '';
+        mainResultsTitle.textContent = `🎨 Tus Creaciones (${images.length} imágenes)`;
+        images.forEach((imgDataUrl, index) => {
+            const imgCard = document.createElement('div');
+            imgCard.className = 'result-image-card';
+            imgCard.innerHTML = `
+                <img src="${imgDataUrl}" alt="Generated Image ${index + 1}" class="generated-image clickable-image">
+                <div class="image-actions">
+                    <button onclick="window.downloadImage('${imgDataUrl}', ${index + 1})" class="download-btn">💾 Descargar</button>
+                </div>
+            `;
+            resultsContainer.appendChild(imgCard);
+
+            // Event listener para modal
+            const imgElement = imgCard.querySelector('.clickable-image');
+            if (imgElement) {
+                imgElement.addEventListener('click', () => window.openImageModal(imgDataUrl));
+                imgElement.style.cursor = 'pointer';
+            }
+        });
+    }
+
+    // File uploader handler
     if (fileUploader) {
         fileUploader.addEventListener('change', async function(event) {
             const files = event.target.files;
@@ -466,11 +459,11 @@ document.addEventListener('DOMContentLoaded', function() {
             for (let i = 0; i < Math.min(files.length, availableSlots); i++) {
                 const file = files[i];
                 if (!file.type.startsWith('image/')) {
-                    showMessage(errorMessage, `Archivo '${file.name}' no es una imagen.`);
+                    showMessage(errorMessage, `Archivo '${file.name}' no es una imagen.`, 'warning');
                     continue;
                 }
                 if (file.size > 10 * 1024 * 1024) { 
-                    showMessage(errorMessage, `Imagen '${file.name}' es demasiado grande. Máx 10MB.`);
+                    showMessage(errorMessage, `Imagen '${file.name}' es demasiado grande. Máx 10MB.`, 'warning');
                     continue;
                 }
 
@@ -491,7 +484,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function updateSessionReferenceImages(imageDataUrl, action = 'add', index = -1) {
         const maxReferences = 3;
         if (action === 'add' && currentReferenceImages.length >= maxReferences) {
-            showMessage(errorMessage, `Límite de ${maxReferences} imágenes de referencia alcanzado.`);
+            showMessage(errorMessage, `Límite de ${maxReferences} imágenes de referencia alcanzado.`, 'warning');
             return false;
         }
 
@@ -507,14 +500,14 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             const data = await response.json();
             if (data.status !== 'success') {
-                showMessage(errorMessage, data.message);
+                showMessage(errorMessage, data.message, 'warning');
                 return false;
             } else {
                 currentReferenceImages = data.reference_images;
                 return true;
             }
         } catch (error) {
-            showMessage(errorMessage, `Error al actualizar referencias: ${error.message}`);
+            showMessage(errorMessage, `Error al actualizar referencias: ${error.message}`, 'warning');
             //console.error('Fetch error:', error);
             return false;
         }
@@ -526,7 +519,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const maxReferences = 3;
 
         if (currentReferenceImages.length >= maxReferences) {
-            showMessage(errorMessage, `Límite de ${maxReferences} imágenes alcanzado.`);
+            showMessage(errorMessage, `Límite de ${maxReferences} imágenes alcanzado.`, 'warning');
             return;
         }
         
@@ -617,7 +610,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.initialSessionState.save_images = this.checked;
                 updateFooterSaveMessage(window.initialSessionState.results && window.initialSessionState.results.length > 0);
             } catch (error) {
-                showMessage(errorMessage, 'Error al actualizar configuración de guardado.');
+                showMessage(errorMessage, 'Error al actualizar configuración de guardado.', 'warning');
                 //console.error('Fetch error:', error);
             }
         });
@@ -663,7 +656,7 @@ document.addEventListener('DOMContentLoaded', function() {
             renderGeneratedImages(window.initialSessionState.results);
             updateFooterSaveMessage(true); 
 
-            // NUEVO: Auto-descarga si save_images es true al inicializar
+            // Auto-descarga si save_images es true al inicializar
             if (window.initialSessionState.save_images) {
                 setTimeout(() => {
                     window.initialSessionState.results.forEach((imgDataUrl, index) => {
@@ -682,7 +675,7 @@ document.addEventListener('DOMContentLoaded', function() {
         activeModelDisplayName = getActiveModelName();
     }
 
-    // NUEVA: Función para descargar imagen (client-side)
+    // Función para descargar imagen (client-side)
     window.downloadImage = function(dataUrl, index) {
         const link = document.createElement('a');
         link.href = dataUrl;

@@ -138,7 +138,7 @@ def upload_image(bearer_token, x_client_data, pil_image, mime_type=None):
     payload = {"imageInput": {"rawImageBytes": image_b64, "mimeType": "image/jpeg", "isUserUploaded": True}, "clientContext": {"tool": "ASSET_MANAGER"}}
     
     try:
-        response = requests.post(real_upload_url, headers=headers, json=payload, timeout=30)
+        response = requests.post(real_upload_url, headers=headers, json=payload, timeout=60)  # Aumentado de 30 a 60s
         response.encoding = 'utf-8'
         if response.status_code == 200: 
             return ('success', response.json()["mediaGenerationId"]["mediaGenerationId"])
@@ -228,7 +228,7 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
         real_generate_url = base64.b64decode(GENERATE_URL_OBFUSCATED).decode('utf-8')
         logging.info(f"  DEBUG: Sending request to: {real_generate_url} with payload: {payload}")
         start_time = time.time()
-        response = requests.post(real_generate_url, headers=headers, json=payload, timeout=90)
+        response = requests.post(real_generate_url, headers=headers, json=payload, timeout=180)  # Aumentado de 90 a 180s
         end_time = time.time()
         response.encoding = 'utf-8'
         logging.info(f"  DEBUG: API request completed in {end_time - start_time:.2f} seconds, Status: {response.status_code}, Response (first 500 chars): {response.text[:500]}...")
@@ -296,7 +296,7 @@ def main_generator_function(prompt, num_images, seed, aspect_ratio_str, model_ty
                 return {'status': 'error', 'message': f'generic_api_error: {str(e)}'}
 
     except requests.exceptions.Timeout:
-        logging.error(f"--- DEBUG: API Request timed out after 90 seconds. ---")
+        logging.error(f"--- DEBUG: API Request timed out after 180 seconds. ---")
         return {'status': 'error', 'message': 'connection_error: timeout'}
     except requests.exceptions.ConnectionError as e:
         logging.error(f"--- DEBUG: API Connection Error: {e} ---")
