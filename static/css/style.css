@@ -18,6 +18,17 @@
     --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
 }
 
+body.dark-mode {
+    --sidebar-bg: #1a202c;
+    --bg-color: #0f172a;
+    --text-color: #e2e8f0;
+    --input-bg: #1a202c;
+    --input-border: #4a5568;
+    --primary-gradient: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+}
+
 * {
     box-sizing: border-box;
 }
@@ -42,7 +53,7 @@ body {
 /* SIDEBAR MEJORADO - SIN SCROLL */
 .sidebar {
     width: 340px;
-    background: linear-gradient(to bottom, #f8fafc 0%, #f1f5f9 100%);
+    background: var(--sidebar-bg); /* Cambiado de gradient a variable */
     border-right: 1px solid var(--input-border);
     padding: 1.25rem;
     box-shadow: var(--shadow-md);
@@ -276,7 +287,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .secondary-button {
-    background: white;
+    background: var(--input-bg); /* Cambiado a variable */
     color: var(--text-color);
     border: 2px solid var(--input-border);
     border-radius: 10px;
@@ -293,7 +304,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .secondary-button:hover {
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    background: var(--sidebar-bg); /* Cambiado a variable */
     border-color: var(--primary-color);
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
@@ -344,7 +355,7 @@ input[type="range"]::-moz-range-thumb {
     font-weight: 500;
     font-size: 0.85rem;
     margin-bottom: 0;
-    background: white;
+    background: var(--input-bg); /* Cambiado a variable */
 }
 
 .radio-group input[type="radio"]:checked + label {
@@ -367,7 +378,7 @@ input[type="range"]::-moz-range-thumb {
 
 .expander-header {
     cursor: pointer;
-    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    background: var(--sidebar-bg); /* Cambiado a variable */
     padding: 0.7rem 1rem;
     border-radius: 8px;
     font-weight: 600;
@@ -380,7 +391,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .expander-header:hover {
-    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+    background: var(--input-border); /* Cambiado a variable */
     border-color: var(--primary-color);
 }
 
@@ -396,7 +407,7 @@ input[type="range"]::-moz-range-thumb {
     padding: 1rem;
     border-radius: 0 0 8px 8px;
     display: none;
-    background: white;
+    background: var(--input-bg); /* Cambiado a variable */
 }
 
 .expander-header.active + .expander-content {
@@ -451,7 +462,7 @@ input[type="range"]::-moz-range-thumb {
     border: 1px solid var(--input-border);
     border-radius: 16px;
     padding: 0.75rem;
-    background: white;
+    background: var(--input-bg); /* Cambiado a variable */
     box-shadow: var(--shadow-md);
     display: flex;
     flex-direction: column;
@@ -516,7 +527,7 @@ input[type="range"]::-moz-range-thumb {
     font-size: 0.85rem;
     padding: 0.6rem 0.9rem;
     margin-top: 0;
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    background: var(--sidebar-bg); /* Cambiado a variable */
     color: var(--text-color);
     border: 2px solid var(--input-border);
     border-radius: 8px;
@@ -525,7 +536,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .action-col button:hover {
-    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+    background: var(--input-border); /* Cambiado a variable */
     border-color: var(--primary-color);
     transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
@@ -605,7 +616,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .popover-button {
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    background: var(--sidebar-bg); /* Cambiado a variable */
     color: var(--text-color);
     border: 2px solid var(--input-border);
     width: 100%;
@@ -613,14 +624,14 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .popover-button:hover {
-    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+    background: var(--input-border); /* Cambiado a variable */
     border-color: var(--primary-color);
 }
 
 .popover-content {
     display: none;
     position: absolute;
-    background-color: white;
+    background-color: var(--input-bg); /* Cambiado a variable */
     min-width: 160px;
     box-shadow: var(--shadow-xl);
     z-index: 1001;
@@ -655,7 +666,7 @@ input[type="range"]::-moz-range-thumb {
     padding: 0.75rem 1rem;
     text-decoration: none;
     display: block;
-    background-color: white;
+    background-color: var(--input-bg); /* Cambiado a variable */
     border: none;
     text-align: left;
     width: 100%;
@@ -703,7 +714,7 @@ input[type="range"]::-moz-range-thumb {
     justify-content: center;
     position: relative;
     overflow: hidden;
-    background: white;
+    background: var(--input-bg); /* Cambiado a variable */
     box-shadow: var(--shadow-sm);
     transition: all 0.3s ease;
 }
@@ -820,7 +831,7 @@ input[type="range"]::-moz-range-thumb {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: white;
+    background: var(--input-bg); /* Cambiado a variable */
     padding: 2rem 3rem;
     border-radius: 16px;
     box-shadow: var(--shadow-xl);
@@ -852,7 +863,7 @@ footer {
     margin-top: auto;
     border-top: 1px solid var(--input-border);
     color: #64748b;
-    background: linear-gradient(to top, #f8fafc 0%, transparent 100%);
+    background: var(--sidebar-bg); /* Cambiado a variable */
 }
 
 /* RESPONSIVE MEJORADO */
@@ -904,7 +915,7 @@ footer {
 
 .model-option {
     padding: 0.75rem 1rem;
-    background: white;
+    background: var(--input-bg); /* Cambiado a variable */
     border: 1px solid var(--input-border);
     border-radius: 8px;
     cursor: pointer;
@@ -916,7 +927,7 @@ footer {
 }
 
 .model-option:hover {
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    background: var(--sidebar-bg); /* Cambiado a variable */
     border-color: var(--primary-color);
     transform: translateX(2px);
 }
@@ -965,4 +976,66 @@ footer {
     font-size: 1.5rem;
     margin-top: 0;
     flex-shrink: 0;
+}
+
+/* Estilos para el Interruptor de Modo Oscuro */
+.settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: var(--primary-color);
+}
+
+input:checked + .slider:before {
+    transform: translateX(22px);
+}
+
+.slider.round {
+    border-radius: 34px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
 }

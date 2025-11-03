@@ -2,6 +2,25 @@
 
 document.addEventListener('DOMContentLoaded', function() {
     const body = document.body;
+    const darkModeToggle = document.getElementById('dark-mode-toggle');
+
+    // --- LÓGICA MODO OSCURO ---
+    if (localStorage.getItem('theme') === 'dark') {
+        body.classList.add('dark-mode');
+        if (darkModeToggle) darkModeToggle.checked = true;
+    }
+
+    if (darkModeToggle) {
+        darkModeToggle.addEventListener('change', () => {
+            if (darkModeToggle.checked) {
+                body.classList.add('dark-mode');
+                localStorage.setItem('theme', 'dark');
+            } else {
+                body.classList.remove('dark-mode');
+                localStorage.setItem('theme', 'light');
+            }
+        });
+    }
 
     window.initialSessionState = JSON.parse(body.getAttribute('data-initial-session-state'));
     window.MODEL_DISPLAY_NAMES_JS = JSON.parse(body.getAttribute('data-model-display-names'));
