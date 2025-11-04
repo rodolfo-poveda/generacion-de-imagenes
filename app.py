@@ -29,9 +29,7 @@ Session(app)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- NUEVO SISTEMA DE TAREAS LIGERO (REEMPLAZA A REDIS/CELERY) ---
-# Un diccionario en memoria para guardar el estado y resultado de las tareas.
-# Esto es suficiente para este caso de uso y extremadamente ligero.
+# --- SISTEMA DE TAREAS LIGERO CON HILOS (REEMPLAZA A CELERY/REDIS) ---
 tasks = {}
 
 def run_generation_in_background(task_id, prompt_en, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag):
@@ -41,18 +39,15 @@ def run_generation_in_background(task_id, prompt_en, num_images, seed, selected_
     """
     logging.info(f"Thread for task {task_id} started.")
     try:
-        # Llamamos a la función que hace el trabajo pesado
         result = main_generator_function(
             prompt_en, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag
         )
-        # Guardamos el resultado junto con el estado de éxito
         tasks[task_id] = {'status': 'SUCCESS', 'result': result}
     except Exception as e:
         logging.error(f"Task {task_id} failed in background thread: {e}")
-        # En caso de un error inesperado, lo guardamos para que el frontend lo sepa
         tasks[task_id] = {'status': 'FAILURE', 'result': {'status': 'error', 'message': 'La generación falló por un error inesperado.'}}
     logging.info(f"Thread for task {task_id} finished.")
-# ----------------------------------------------------------------
+# -------------------------------------------------------------------------
 
 @app.before_request
 def initialize_session():
@@ -79,10 +74,7 @@ def initialize_session():
             last_activity = session.get('last_activity', 0)
             if now - last_activity > SESSION_TIMEOUT_MIN * 60 or 'last_activity' not in session:
                 logging.info(f"New visit detected for SID {session.sid}: Cleaning old refs/results.")
-                session['results'] = []
-                session['reference_images_list'] = []
-                session['save_images'] = False
-                session['last_prompt'] = ''
+                session.clear()
                 session['last_activity'] = now
             else:
                 session['last_activity'] = now
@@ -92,11 +84,11 @@ def index():
     logging.info(f"Rendering index.html. Active tab: {session.get('active_tab')}, Results count: {len(session.get('results', []))}")
     return render_template('index.html',
                            model_names_list=MODEL_NAMES_LIST,
-                           active_tab=session['active_tab'],
-                           results=session['results'], 
-                           reference_images_list=session['reference_images_list'],
-                           aspect_ratio_index=session['aspect_ratio_index'],
-                           save_images=session['save_images'],
+                           active_tab=session.get('active_tab', MODEL_NAMES_LIST[0]),
+                           results=session.get('results', []), 
+                           reference_images_list=session.get('reference_images_list', []),
+                           aspect_ratio_index=session.get('aspect_ratio_index', 0),
+                           save_images=session.get('save_images', False),
                            MODEL_DISPLAY_NAMES=MODEL_DISPLAY_NAMES,
                            MODEL_NAMES_LIST=MODEL_NAMES_LIST,
                            last_prompt=session.get('last_prompt', ''))
@@ -129,6 +121,7 @@ def generate_magic_prompt():
 def generate_images():
     data = request.json
     prompt_es = data.get('prompt', '')
+    session['last_prompt'] = prompt_es
     num_images = int(data.get('num_images', 4))
     seed = int(data.get('seed', -1))
     selected_ratio = data.get('aspect_ratio', '1:1')
@@ -140,7 +133,6 @@ def generate_images():
     if not prompt_es.strip():
         return jsonify({'status': 'error', 'message': 'Por favor, escribe una descripción.'}), 400
 
-    session['last_prompt'] = prompt_es
     prompt_en = translate_to_english(prompt_es)
 
     is_ref_model = model_type in ["R2I", "GEM_PIX"]
@@ -158,18 +150,14 @@ def generate_images():
     if not GOOGLE_SESSION_TOKEN:
          return jsonify({'status': 'error', 'message': 'auth_error: GOOGLE_SESSION_TOKEN no configurado en el servidor.'}), 500
 
-    # --- LÓGICA DE HILOS ---
     task_id = str(uuid.uuid4())
     tasks[task_id] = {'status': 'PENDING'}
     
-    # Preparamos los argumentos para la función que se ejecutará en segundo plano
     thread_args = (task_id, prompt_en, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag)
-    # Creamos e iniciamos el hilo
     thread = Thread(target=run_generation_in_background, args=thread_args)
-    thread.daemon = True # El hilo morirá si la aplicación principal muere
+    thread.daemon = True
     thread.start()
     
-    # Respondemos inmediatamente al frontend con el ID de la tarea
     return jsonify({'status': 'processing', 'task_id': task_id}), 202
 
 @app.route('/check_task/<task_id>', methods=['GET'])
@@ -183,13 +171,12 @@ def check_task_status(task_id):
         
     elif task['status'] == 'SUCCESS':
         result = task['result']
+        tasks.pop(task_id, None) 
         if result['status'] == 'success':
             session['results'] = result['images']
             session['save_images'] = result.get('save_images', False)
-            tasks.pop(task_id, None) # Limpiar la tarea de la memoria una vez entregada
             return jsonify({'status': 'success', 'images': result['images']})
         else:
-            # Reutilizamos tu diccionario de errores detallados original
             detailed_error_messages = {
                 "minor_upload_error": "La imagen de referencia no pudo ser procesada. Podría infringir las políticas de contenido (menores, contenido explícito). Prueba con otra imagen.",
                 "prominent_people_error": "La imagen de referencia parece contener personas famosas o contenido sensible. Por favor, intenta con una imagen diferente.",
@@ -206,8 +193,7 @@ def check_task_status(task_id):
                 "generic_api_error": "Ocurrió un error inesperado con la IA. Si el problema persiste, prueba con una descripción o imagen diferente."
             }
             message_key = result.get('message', 'generic_api_error')
-            final_user_message = detailed_error_messages.get(message_key, detailed_error_messages["generic_api_error"])
-            tasks.pop(task_id, None)
+            final_user_message = detailed_error_messages.get(message_key, "Ocurrió un error inesperado.")
             return jsonify({'status': 'error', 'message': final_user_message})
             
     elif task['status'] == 'FAILURE':
@@ -251,11 +237,13 @@ def remove_reference_image(index):
 
 @app.route('/clear_session_results', methods=['POST'])
 def clear_session_results():
-    session['results'] = []
-    session['reference_images_list'] = []
-    session['save_images'] = False
-    session['aspect_ratio_index'] = 0
-    session['last_prompt'] = ''
+    if 'results' in session:
+        session['results'] = []
+        session['reference_images_list'] = []
+        session['save_images'] = False
+        session['aspect_ratio_index'] = 0
+        session['last_prompt'] = ''
+        logging.info(f"Reset complete for session {session.sid}: cleared results, references, save_images, and last_prompt.")
     return jsonify({'status': 'success'})
 
 if __name__ == '__main__':
