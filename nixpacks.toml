@@ -1,13 +1,11 @@
 # nixpacks.toml (VERSIÓN FINAL Y ROBUSTA)
 
-# 1. Fase de proveedores: Aseguramos tener todo el software necesario.
+# 1. Fase de proveedores: Instalar Python, Redis y las librerías necesarias.
 [phases.setup]
 nixPkgs = ["python3", "gcc", "libjpeg", "zlib", "redis"]
 
-# 2. Fase de instalación: Nixpacks ya sabe cómo instalar pip, lo dejamos por defecto.
-
-# 3. Fase de inicio: Aquí está el cambio fundamental.
+# 2. Fase de inicio: Aquí está el cambio fundamental.
 [start]
-# Le damos un único comando explícito al shell para que lo ejecute.
-# Esto es más robusto que usar los 'processes' separados.
-cmd = "redis-server --daemonize yes && celery -A celery_worker.celery worker --loglevel=info & gunicorn --bind 0.0.0.0:5000 --workers 4 app:app"
+# Usamos un script de inicio para asegurar que todo se configure correctamente.
+# El comando ahora es mucho más limpio.
+cmd = "./start.sh"
