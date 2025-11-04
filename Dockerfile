@@ -1,27 +1,24 @@
 # Dockerfile
 
-# 1. Usa una imagen oficial y ligera de Python como base
+# 1. Usar una imagen base de Python ligera y oficial.
 FROM python:3.12-slim
 
-# 2. Instala dependencias del sistema operativo necesarias para Pillow (PIL)
+# 2. Instalar dependencias del sistema operativo que Pillow (PIL) necesita.
 RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     zlib1g-dev \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Establece el directorio de trabajo dentro del contenedor
+# 3. Establecer el directorio de trabajo dentro del contenedor.
 WORKDIR /app
 
-# 4. Copia el archivo de requerimientos y los instala
-# Se hace en un paso separado para aprovechar el caché de capas de Docker
+# 4. Copiar e instalar las dependencias de Python.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copia todo el resto del código de tu aplicación
+# 5. Copiar el resto del código de la aplicación.
 COPY . .
 
-# 6. Expone el puerto que usará Gunicorn
+# 6. Exponer el puerto que Gunicorn usará.
 EXPOSE 5000
-
-# NOTA: No hay CMD aquí. El comando se especificará en docker-compose.yml

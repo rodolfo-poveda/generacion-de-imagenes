@@ -3,40 +3,35 @@
 version: '3.8'
 
 services:
-  # Servicio 1: El servidor Redis que ya tienes en tu VPS.
-  # Docker Compose lo gestionará.
+  # Servicio 1: El servidor Redis
   redis:
     image: "redis:alpine"
     restart: always
 
   # Servicio 2: Tu aplicación web (Flask + Gunicorn)
   web:
-    build: .  # Le dice a Docker que construya la imagen usando el Dockerfile de este directorio
+    build: .  # Construye la imagen usando el Dockerfile local
     restart: always
-    # El comando que Gunicorn ejecutará en producción
     command: gunicorn --bind 0.0.0.0:5000 --workers 4 app:app
     ports:
-      - "5000:5000" # Mapea el puerto 5000 de tu VPS al puerto 5000 del contenedor
+      - "5000:5000"
     environment:
-      # Estas variables le dicen a tu app cómo encontrar Redis.
-      # 'redis' es el nombre del servicio de arriba, Docker se encarga de la conexión.
+      # Las variables de entorno para conectarse a Redis
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-    # secrets/env_file: Dependerá de cómo Dockploy maneje las variables de entorno.
-    # Generalmente, las configuras en el panel de control de Dockploy.
+      # LAS OTRAS VARIABLES (SECRETS) SE CONFIGURarán EN DOKPLOY
     depends_on:
-      - redis # Le dice a este servicio que espere a que Redis esté listo antes de iniciar
+      - redis
 
   # Servicio 3: El worker de Celery
   worker:
-    build: . # Usa la misma imagen que el servicio web. ¡No hay que construir dos veces!
+    build: . # Usa la misma imagen que el servicio web
     restart: always
-    # El comando para iniciar el worker de Celery
     command: celery -A celery_worker.celery worker --loglevel=info
     environment:
       # El worker también necesita saber dónde está Redis
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
-    # También necesitará acceso a tus claves de API que configures en Dockploy
+      # TAMBIÉN NECESITARÁ LOS SECRETS DE DOKPLOY
     depends_on:
-      - redis # También espera a que Redis esté listo
+      - redis
