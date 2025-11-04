@@ -1,0 +1,12 @@
+# nixpacks.toml
+
+# Define los procesos que Nixpacks debe iniciar.
+# Los nombres ('web', 'worker') son importantes.
+[processes]
+web = "gunicorn --bind 0.0.0.0:5000 --workers 4 app:app"
+worker = "celery -A celery_worker.celery worker --loglevel=info"
+
+# Define el proceso por defecto que se ejecutará si no se especifica.
+# El proceso 'web' es el que recibirá el tráfico de internet.
+[start]
+cmd = "web"
