@@ -1,0 +1,35 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # Servicio 1: El servidor Redis
+  redis:
+    image: "redis:alpine"
+    restart: always
+
+  # Servicio 2: Tu aplicación web (Flask + Gunicorn)
+  web:
+    build: .
+    restart: always
+    command: gunicorn --bind 0.0.0.0:5000 --workers 2 --threads 4 --worker-class gthread --timeout 120 app:app
+    ports:
+      - "5000:5000"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      # Dokploy inyectará las variables de GEMINI_API_KEY y SECRET_KEY aquí
+    depends_on:
+      - redis
+
+  # Servicio 3: El worker de Celery
+  worker:
+    build: .
+    restart: always
+    # Usamos el pool de gevent por eficiencia de memoria, pero con una concurrencia razonable
+    command: celery -A celery_worker.celery worker --loglevel=info -P gevent -c 100
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis

@@ -9,6 +9,8 @@ import base64
 import logging
 import google.generativeai as genai
 import time
+import uuid
+from threading import Thread
 
 from config import MODEL_DISPLAY_NAMES, MODEL_NAMES_LIST, GOOGLE_SESSION_TOKEN, GEMINI_API_KEY
 from utils import (
@@ -27,6 +29,26 @@ Session(app)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# --- SISTEMA DE TAREAS LIGERO CON HILOS (REEMPLAZA A CELERY/REDIS) ---
+tasks = {}
+
+def run_generation_in_background(task_id, prompt_en, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag):
+    """
+    Esta función se ejecutará en un hilo separado (en segundo plano).
+    Llama a la función de generación principal y guarda el resultado en el diccionario 'tasks'.
+    """
+    logging.info(f"Thread for task {task_id} started.")
+    try:
+        result = main_generator_function(
+            prompt_en, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag
+        )
+        tasks[task_id] = {'status': 'SUCCESS', 'result': result}
+    except Exception as e:
+        logging.error(f"Task {task_id} failed in background thread: {e}")
+        tasks[task_id] = {'status': 'FAILURE', 'result': {'status': 'error', 'message': 'La generación falló por un error inesperado.'}}
+    logging.info(f"Thread for task {task_id} finished.")
+# -------------------------------------------------------------------------
+
 @app.before_request
 def initialize_session():
     if request.endpoint:
@@ -43,6 +65,8 @@ def initialize_session():
             session['active_tab'] = MODEL_NAMES_LIST[0]
         if 'aspect_ratio_index' not in session:
             session['aspect_ratio_index'] = 0
+        if 'last_prompt' not in session:
+            session['last_prompt'] = ''
 
         SESSION_TIMEOUT_MIN = 30
         if request.endpoint == 'index':
@@ -50,9 +74,7 @@ def initialize_session():
             last_activity = session.get('last_activity', 0)
             if now - last_activity > SESSION_TIMEOUT_MIN * 60 or 'last_activity' not in session:
                 logging.info(f"New visit detected for SID {session.sid}: Cleaning old refs/results.")
-                session['results'] = []
-                session['reference_images_list'] = []
-                session['save_images'] = False
+                session.clear()
                 session['last_activity'] = now
             else:
                 session['last_activity'] = now
@@ -62,13 +84,14 @@ def index():
     logging.info(f"Rendering index.html. Active tab: {session.get('active_tab')}, Results count: {len(session.get('results', []))}")
     return render_template('index.html',
                            model_names_list=MODEL_NAMES_LIST,
-                           active_tab=session['active_tab'],
-                           results=session['results'], 
-                           reference_images_list=session['reference_images_list'],
-                           aspect_ratio_index=session['aspect_ratio_index'],
-                           save_images=session['save_images'],
+                           active_tab=session.get('active_tab', MODEL_NAMES_LIST[0]),
+                           results=session.get('results', []), 
+                           reference_images_list=session.get('reference_images_list', []),
+                           aspect_ratio_index=session.get('aspect_ratio_index', 0),
+                           save_images=session.get('save_images', False),
                            MODEL_DISPLAY_NAMES=MODEL_DISPLAY_NAMES,
-                           MODEL_NAMES_LIST=MODEL_NAMES_LIST)
+                           MODEL_NAMES_LIST=MODEL_NAMES_LIST,
+                           last_prompt=session.get('last_prompt', ''))
 
 @app.route('/improve_prompt', methods=['POST'])
 def improve_prompt():
@@ -98,31 +121,26 @@ def generate_magic_prompt():
 def generate_images():
     data = request.json
     prompt_es = data.get('prompt', '')
+    session['last_prompt'] = prompt_es
     num_images = int(data.get('num_images', 4))
     seed = int(data.get('seed', -1))
     selected_ratio = data.get('aspect_ratio', '1:1')
     model_name_display = data.get('model_name_display')
     save_images_flag = data.get('save_images', False)
     ref_images_data_urls = data.get('reference_images', [])
-
     model_type = MODEL_DISPLAY_NAMES.get(model_name_display)
 
     if not prompt_es.strip():
         return jsonify({'status': 'error', 'message': 'Por favor, escribe una descripción.'}), 400
 
-    # Traducción optimizada
     prompt_en = translate_to_english(prompt_es)
-    logging.info(f"Prompt original (ES): '{prompt_es[:100]}...' → Final (EN): '{prompt_en[:100]}...'")
 
     is_ref_model = model_type in ["R2I", "GEM_PIX"]
-    refs_provided = bool(ref_images_data_urls)
-
     final_ref_images = ref_images_data_urls
-    if is_ref_model and not refs_provided:
+    if is_ref_model and not bool(ref_images_data_urls):
         if model_type == "R2I":
             return jsonify({'status': 'error', 'message': f"El modelo '{model_name_display}' requiere una imagen de referencia."}), 400
         elif model_type == "GEM_PIX":
-            logging.info("GEM_PIX selected without reference images. Creating blank image.")
             blank_img_pil = create_blank_image(selected_ratio)
             buffered = io.BytesIO()
             blank_img_pil.save(buffered, format="PNG") 
@@ -132,73 +150,74 @@ def generate_images():
     if not GOOGLE_SESSION_TOKEN:
          return jsonify({'status': 'error', 'message': 'auth_error: GOOGLE_SESSION_TOKEN no configurado en el servidor.'}), 500
 
-    result = main_generator_function(prompt_en, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag)
+    task_id = str(uuid.uuid4())
+    tasks[task_id] = {'status': 'PENDING'}
     
-    if result['status'] == 'success':
-        session['results'] = result['images']
-        session['save_images'] = save_images_flag 
-        logging.info(f"Generated {len(result['images'])} images for session {session.sid}. Save images: {save_images_flag}")
-        return jsonify({'status': 'success', 'images': result['images']})
-    else:
-        detailed_error_messages = {
-            "minor_upload_error": "La imagen de referencia no pudo ser procesada. Podría infringir las políticas de contenido (menores, contenido explícito). Prueba con otra imagen.",
-            "prominent_people_error": "La imagen de referencia parece contener personas famosas o contenido sensible. Por favor, intenta con una imagen diferente.",
-            "child_exploitation_error": "Se ha detectado contenido inaceptable en la imagen. Esta acción está estrictamente prohibida y no será procesada.",
-            "harmful_content_error": "La imagen de referencia parece contener elementos dañinos y no puede ser procesada. Por favor, usa otra.",
-            "generic_upload_error": "Hubo un problema al subir tu imagen. Asegúrate de que es un archivo válido (JPG/PNG) y no está dañado.",
-            "image_too_large": "¡La imagen es muy grande! Por favor, intenta con una imagen de menos de 10MB.",
-            "upload_failed: no_media_ids": "Ocurrió un error al subir la imagen de referencia. Por favor, inténtalo de nuevo.",
-            "unsafe_generation_error": "Tu descripción parece infringir las políticas de contenido seguro. Por favor, modifica el texto para continuar.",
-            "minors_error": "Tu descripción contiene elementos que no se pueden procesar (contenido sensible, etc.). Por favor, ajústala.",
-            "sexual_error": "Tu descripción contiene elementos que no se pueden procesar (contenido sensible, etc.). Por favor, ajústala.",
-            "violence_error": "Tu descripción contiene elementos que no se pueden procesar (contenido violento, etc.). Por favor, ajústala.",
-            "criminal_error": "Tu descripción contiene elementos que no se pueden procesar (actividades ilegales, etc.). Por favor, ajústala.",
-            "no_images_returned": "La IA no pudo generar un resultado para tu descripción. ¡Intenta ser más específico o prueba con una idea diferente!",
-            "auth_error": "Tu sesión parece haber caducado. Por favor, recarga la página para continuar.",
-            "connection_error: timeout": "La solicitud tardó demasiado en responder. Esto puede pasar con imágenes muy pesadas o una conexión lenta. Inténtalo de nuevo.",
-            "connection_error": "No se pudo conectar con el servidor de IA. Revisa tu conexión a internet y vuelve a intentarlo.",
-            "generic_api_error: invalid_json": "Ocurrió un error inesperado con la IA. Por favor, inténtalo de nuevo.",
-            "generic_api_error: non_json_error_response": "Ocurrió un error inesperado con la IA. Por favor, inténtalo de nuevo.",
-            "internal_config_error": "Hay un problema de configuración en la aplicación. El administrador ha sido notificado.",
-            "no_image_provided": "Error interno: no se encontró la imagen a procesar. Intenta subirla de nuevo.",
-            "generic_api_error": "Ocurrió un error inesperado con la IA. Si el problema persiste, prueba con una descripción o imagen diferente."
-        }
+    thread_args = (task_id, prompt_en, num_images, seed, selected_ratio, model_type, final_ref_images, save_images_flag)
+    thread = Thread(target=run_generation_in_background, args=thread_args)
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({'status': 'processing', 'task_id': task_id}), 202
+
+@app.route('/check_task/<task_id>', methods=['GET'])
+def check_task_status(task_id):
+    task = tasks.get(task_id)
+    if not task:
+        return jsonify({'status': 'error', 'message': 'Tarea no encontrada o expirada.'}), 404
+
+    if task['status'] == 'PENDING':
+        return jsonify({'status': 'processing'})
         
-        message_key = result['message']
-        if ":" in message_key:
-            message_key_parts = message_key.split(':', 1)
-            if message_key_parts[0] in detailed_error_messages:
-                message_key = message_key_parts[0]
-        
-        final_user_message = detailed_error_messages.get(message_key, detailed_error_messages["generic_api_error"])
-        
-        logging.error(f"Error generating images for session {session.sid}: {result['message']} -> User message: {final_user_message}")
-        return jsonify({'status': 'error', 'message': final_user_message}), 500
+    elif task['status'] == 'SUCCESS':
+        result = task['result']
+        tasks.pop(task_id, None) 
+        if result['status'] == 'success':
+            session['results'] = result['images']
+            session['save_images'] = result.get('save_images', False)
+            return jsonify({'status': 'success', 'images': result['images']})
+        else:
+            detailed_error_messages = {
+                "minor_upload_error": "La imagen de referencia no pudo ser procesada. Podría infringir las políticas de contenido (menores, contenido explícito). Prueba con otra imagen.",
+                "prominent_people_error": "La imagen de referencia parece contener personas famosas o contenido sensible. Por favor, intenta con una imagen diferente.",
+                "child_exploitation_error": "Se ha detectado contenido inaceptable en la imagen. Esta acción está estrictamente prohibida y no será procesada.",
+                "harmful_content_error": "La imagen de referencia parece contener elementos dañinos y no puede ser procesada. Por favor, usa otra.",
+                "generic_upload_error": "Hubo un problema al subir tu imagen. Asegúrate de que es un archivo válido (JPG/PNG) y no está dañado.",
+                "image_too_large": "¡La imagen es muy grande! Por favor, intenta con una imagen de menos de 10MB.",
+                "upload_failed: no_media_ids": "Ocurrió un error al subir la imagen de referencia. Por favor, inténtalo de nuevo.",
+                "unsafe_generation_error": "Tu descripción parece infringir las políticas de contenido seguro. Por favor, modifica el texto para continuar.",
+                "no_images_returned": "La IA no pudo generar un resultado para tu descripción. ¡Intenta ser más específico o prueba con una idea diferente!",
+                "auth_error": "Tu sesión parece haber caducado. Por favor, recarga la página para continuar.",
+                "connection_error: timeout": "La solicitud tardó demasiado en responder. Esto puede pasar con imágenes muy pesadas o una conexión lenta. Inténtalo de nuevo.",
+                "connection_error": "No se pudo conectar con el servidor de IA. Revisa tu conexión a internet y vuelve a intentarlo.",
+                "generic_api_error": "Ocurrió un error inesperado con la IA. Si el problema persiste, prueba con una descripción o imagen diferente."
+            }
+            message_key = result.get('message', 'generic_api_error')
+            final_user_message = detailed_error_messages.get(message_key, "Ocurrió un error inesperado.")
+            return jsonify({'status': 'error', 'message': final_user_message})
+            
+    elif task['status'] == 'FAILURE':
+        result = task['result']
+        tasks.pop(task_id, None)
+        return jsonify({'status': 'error', 'message': result.get('message')})
+    
+    return jsonify({'status': 'processing'})
 
 @app.route('/update_session_settings', methods=['POST'])
 def update_session_settings():
     data = request.json  
-    
     if 'active_tab' in data:  
         new_tab = data['active_tab']  
         session['active_tab'] = new_tab  
-        
         session['results'] = []  
         session['save_images'] = False  
-        
         new_model_type = MODEL_DISPLAY_NAMES.get(new_tab, '')  
         if new_model_type not in ["R2I", "GEM_PIX"]:  
             session['reference_images_list'] = []  
-            logging.info(f"Cleaned refs on switch to non-ref model: {new_tab}")  
-        else:  
-            logging.info(f"Preserved refs on switch to ref model: {new_tab}")  
-            
     if 'aspect_ratio_index' in data:  
         session['aspect_ratio_index'] = data['aspect_ratio_index']
     if 'save_images' in data:  
         session['save_images'] = data['save_images']
-    
-    logging.info(f"Session settings updated for SID {session.sid}: {data}")  
     return jsonify({'status': 'success'})  
 
 @app.route('/add_reference_image', methods=['POST'])
@@ -208,22 +227,13 @@ def add_reference_image():
     if image_data_url and len(session['reference_images_list']) < 3:
         if image_data_url not in session['reference_images_list']: 
             session['reference_images_list'].append(image_data_url)
-            logging.info(f"Added reference image for session {session.sid}. Current count: {len(session['reference_images_list'])}")
-        else:
-            logging.warning(f"Reference image already exists in session for SID {session.sid}.")
-            
-        return jsonify({'status': 'success', 'reference_images': session['reference_images_list']})
-    logging.warning(f"Failed to add reference image for session {session.sid}. Limit reached or invalid image.")
-    return jsonify({'status': 'error', 'message': 'Límite de 3 imágenes de referencia alcanzado o imagen inválida.'}), 400
+    return jsonify({'status': 'success', 'reference_images': session['reference_images_list']})
 
 @app.route('/remove_reference_image/<int:index>', methods=['POST'])
 def remove_reference_image(index):
     if 0 <= index < len(session['reference_images_list']):
-        removed_image = session['reference_images_list'].pop(index)
-        logging.info(f"Removed reference image {index} for session {session.sid}. Current count: {len(session['reference_images_list'])}")
-        return jsonify({'status': 'success', 'reference_images': session['reference_images_list']})
-    logging.warning(f"Failed to remove reference image {index} for session {session.sid}. Invalid index.")
-    return jsonify({'status': 'error', 'message': 'Índice de imagen de referencia inválido.'}), 400
+        session['reference_images_list'].pop(index)
+    return jsonify({'status': 'success', 'reference_images': session['reference_images_list']})
 
 @app.route('/clear_session_results', methods=['POST'])
 def clear_session_results():
@@ -232,10 +242,9 @@ def clear_session_results():
         session['reference_images_list'] = []
         session['save_images'] = False
         session['aspect_ratio_index'] = 0
-        session.clear()  
-        logging.info(f"Reset complete for session {session.sid}: cleared results, references, save_images, and aspect_ratio_index.")
+        session['last_prompt'] = ''
+        logging.info(f"Reset complete for session {session.sid}: cleared results, references, save_images, and last_prompt.")
     return jsonify({'status': 'success'})
-
 
 if __name__ == '__main__':
     app.run(debug=True)

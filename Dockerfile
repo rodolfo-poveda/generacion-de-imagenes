@@ -22,4 +22,5 @@ COPY . .
 EXPOSE 5000
 
 # Comando de Gunicorn optimizado para producción con un timeout largo
+# ESTA ES LA ÚNICA VERSIÓN QUE DEBE QUEDAR
 CMD ["gunicorn", "--workers", "4", "--threads", "12", "--worker-class", "gthread", "--bind", "0.0.0.0:5000", "--timeout", "180", "--max-requests", "1000", "app:app"]

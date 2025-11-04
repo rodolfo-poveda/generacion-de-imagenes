@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Image Generator Pro</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <!-- Aquí puedes añadir favicons si lo deseas -->
 </head>
 <body
     data-initial-session-state='{
@@ -22,10 +21,17 @@
         <h1>🎨 AI Image Generator Pro</h1>
         <p>Genera imágenes de alta calidad a partir de texto o imágenes de referencia.</p>
 
+        <div class="settings-row" style="margin-top: 0; margin-bottom: 1rem;">
+            <span>🌙 Modo Oscuro</span>
+            <label class="switch">
+                <input type="checkbox" id="dark-mode-toggle">
+                <span class="slider round"></span>
+            </label>
+        </div>
+
         <hr>
 
         <h3>🤖 Modelo de IA</h3>
-        <!-- EXPANDER PARA MODELO DE IA: Colapsado por default, se expande al clic y colapsa tras selección (reload) -->
         <div class="expander model-expander">
             <div class="expander-header" onclick="window.toggleExpander(this)">
                 <span>{{ active_tab }}</span>
@@ -45,7 +51,7 @@
         <hr>
 
         <h3>✍️ Descripción</h3>
-        <textarea id="prompt-textarea" rows="6" placeholder="Ej: Un astronauta montando a caballo en Marte..."></textarea>
+        <textarea id="prompt-textarea" rows="6" placeholder="Ej: Un astronauta montando a caballo en Marte...">{{ last_prompt }}</textarea>
 
         <div class="button-row" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
             <button id="improve-prompt-button" class="secondary-button" style="width: 50%;">🧠 Mejorar Prompt con IA</button>
@@ -100,7 +106,6 @@
         <div id="reference-images-section">
             <h4>🖼️ Imágenes de Referencia</h4>
             <div id="reference-images-container" class="reference-images-grid">
-                <!-- Las imágenes de referencia se cargarán aquí con JS -->
             </div>
             <div id="reference-uploader-section">
                  <label for="reference-file-uploader" class="file-uploader-label">
@@ -112,14 +117,6 @@
         </div>
         {% endif %}
 
-        <div class="settings-row">
-            <span>🌙 Modo Oscuro</span>
-            <label class="switch">
-                <input type="checkbox" id="dark-mode-toggle">
-                <span class="slider round"></span>
-            </label>
-        </div>
-
         <button id="generate-button" type="submit" class="primary-button">🚀 Generar Imágenes</button>
         <button id="clear-results-button" class="secondary-button" style="display:none; margin-top: 1rem; width: 100%; padding: 0.6rem 1.25rem;">🗑️ Resetear Interfaz</button>
     </div>
@@ -128,10 +125,12 @@
         <div class="main-content">
             <h2 id="main-results-title">🎨 Tus Creaciones</h2>
             <div id="results-container" class="results-grid">
-                <!-- El contenido inicial se cargará aquí con JavaScript, ahora desde la sesión del servidor -->
             </div>
 
-            <div id="loading-spinner" class="loading-spinner">✨ Creando tu obra maestra...</div>
+            <div id="loading-spinner" class="loading-spinner">
+                ✨ Creando tu obra de arte...
+                <div id="queue-status-debug" style="font-size: 0.8rem; margin-top: 0.5rem; color: #64748b;"></div>
+            </div>
             <div id="error-message" class="error-message" style="display: none;"></div>
             <div id="success-message" class="info-message" style="display: none;"></div>
         </div>
@@ -143,7 +142,6 @@
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     
-    <!-- MODAL PARA AMPLIAR IMÁGENES -->
     <div id="image-modal" class="image-modal">
         <span class="close-modal" onclick="window.closeImageModal()">&times;</span>
         <div class="image-modal-content">
@@ -151,7 +149,6 @@
         </div>
     </div>
 
-    <!-- MODAL PARA CÁMARA -->
     <div id="camera-modal" class="image-modal">
         <span class="close-modal" onclick="window.closeCameraModal()">&times;</span>
         <div id="camera-modal-content" class="image-modal-content">
@@ -162,6 +159,5 @@
             </div>
         </div>
     </div>
-
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'994cc410699c9426',t:'MTc2MTUxMTE5Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
