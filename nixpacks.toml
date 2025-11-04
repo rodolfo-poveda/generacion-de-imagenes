@@ -1,12 +1,23 @@
 # nixpacks.toml
 
-# Define los procesos que Nixpacks debe iniciar.
-# Los nombres ('web', 'worker') son importantes.
-[processes]
-web = "gunicorn --bind 0.0.0.0:5000 --workers 4 app:app"
-worker = "celery -A celery_worker.celery worker --loglevel=info"
+# --- FASE DE PROVEEDORES ---
+# Le decimos a Nixpacks qué software del sistema necesitamos.
+# Necesitamos Python, las librerías para Pillow, Y TAMBIÉN REDIS.
+[phases.setup]
+nixPkgs = ["...", "python3", "gcc", "libjpeg", "zlib", "redis"]
 
-# Define el proceso por defecto que se ejecutará si no se especifica.
-# El proceso 'web' es el que recibirá el tráfico de internet.
+# --- FASE DE PROCESOS ---
+# Definimos los comandos para iniciar nuestros servicios.
+[processes]
+# El proceso 'web' ejecuta Gunicorn.
+web = "gunicorn --bind 0.0.0.0:5000 --workers 4 app:app"
+# El proceso 'worker' ejecuta Celery.
+worker = "celery -A celery_worker.celery worker --loglevel=info"
+# El proceso 'redis' simplemente inicia el servidor de Redis.
+redis = "redis-server"
+
+# --- FASE DE INICIO ---
+# Le decimos a Nixpacks qué procesos debe iniciar al desplegar.
+# ¡Aquí está la magia! Le decimos que inicie los tres.
 [start]
-cmd = "web"
+cmd = "redis & web & worker"
