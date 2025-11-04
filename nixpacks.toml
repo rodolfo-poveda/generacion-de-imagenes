@@ -1,11 +1,8 @@
-# nixpacks.toml (VERSIÓN FINAL Y ROBUSTA)
+# nixpacks.toml
 
-# 1. Fase de proveedores: Instalar Python, Redis y las librerías necesarias.
 [phases.setup]
 nixPkgs = ["python3", "gcc", "libjpeg", "zlib", "redis"]
 
-# 2. Fase de inicio: Aquí está el cambio fundamental.
 [start]
-# Usamos un script de inicio para asegurar que todo se configure correctamente.
-# El comando ahora es mucho más limpio.
-cmd = "./start.sh"
+# Cambiamos a --worker-class gthread y especificamos el número de hilos.
+cmd = ". /opt/venv/bin/activate && redis-server --daemonize yes && celery -A celery_worker.celery worker --loglevel=info & gunicorn --bind 0.0.0.0:5000 --workers 4 --threads 10 --worker-class gthread --timeout 120 app:app"
