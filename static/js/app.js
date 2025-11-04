@@ -365,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     } 
 
-    // --- LÓGICA DE SONDEO MODIFICADA PARA TURNOS INDIVIDUALES ---
+    // --- LÓGICA DE SONDEO (POLLING) MODIFICADA PARA TURNOS INDIVIDUALES ---
     function pollTaskStatus(taskId, initialPosition) {
         const queueStatusDebug = document.getElementById('queue-status-debug');
         
