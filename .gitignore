@@ -1,17 +1,15 @@
+# .gitignore
+
 # Entorno virtual de Python
 venv/
-/venv/
 
 # Archivos de caché de Python
 __pycache__/
 *.pyc
 
-# Configuraciones de VSCode
-.vscode/
-
-# Datos de sesión y salida
-flask_session_data/
-output/
-
-# Archivo de variables de entorno
+# Archivo de secretos locales
 .env
+
+# Otros
+.DS_Store
+flask_session_data/

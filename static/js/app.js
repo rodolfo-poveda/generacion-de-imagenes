@@ -330,8 +330,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 showMessage(errorMessage, '❌ Error de conexión al mejorar prompt. Inténtalo de nuevo.');
                 //console.error('Fetch error on improve_prompt:', error);
             } finally {
-                improvePromptButton.disabled = false;
-                improvePromptButton.textContent = '🧠 Mejorar Prompt con Gemini';
+                improvePromptButton.textContent = '🧠 Mejorar Prompt con IA';
                 enableAllButtons();
             }
         });
@@ -360,72 +359,67 @@ document.addEventListener('DOMContentLoaded', function() {
                 showMessage(errorMessage, '❌ Error de conexión al generar prompt mágico. Inténtalo de nuevo.');
                 //console.error('Fetch error on magic_prompt:', error);
             } finally {
-                magicPromptButton.disabled = false;
                 magicPromptButton.textContent = '✨ Prompt Mágico';
                 enableAllButtons();
             }
         });
     } 
 
-    // Función para generar imágenes (extraída para reutilizar en inicial)
-    async function performGenerate(prompt, num_images, seed, aspect_ratio, model_name_display, save_images, reference_images) {
-        try {
-            const response = await fetch('/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: prompt,
-                    num_images: num_images,
-                    seed: seed,
-                    aspect_ratio: aspect_ratio,
-                    model_name_display: model_name_display,
-                    save_images: save_images,
-                    reference_images: reference_images
-                }),
-            });
-
-            const responseText = await response.text(); 
-            
-            let result;
-            try {
-                result = JSON.parse(responseText); 
-            } catch (jsonError) {
-                throw new Error("Failed to parse JSON response from server."); 
-            }
-
-            if (response.ok && result.status === 'success') {
-                window.initialSessionState.results = result.images; 
-                renderGeneratedImages(result.images); 
-                showMessage(successMessage, `🎉 ¡${result.images.length} imagen(es) generada(s)!`, 'success');
-                window.initialSessionState.save_images = save_images; 
-                updateFooterSaveMessage(result.images.length > 0);
-
-                // NUEVO: Auto-descarga si save_images es true
-                if (save_images) {
-                    setTimeout(() => {
-                        result.images.forEach((imgDataUrl, index) => {
-                            downloadImage(imgDataUrl, index + 1);
-                        });
-                        showMessage(successMessage, `🎉 ${result.images.length} imágenes descargadas automáticamente.`, 'success');
-                    }, 500);  // Delay para que el DOM se renderice
-                }
-
-                if (clearResultsButton) clearResultsButton.style.display = 'block';
-                return true;
+    // --- LÓGICA DE SONDEO MODIFICADA PARA TURNOS INDIVIDUALES ---
+    function pollTaskStatus(taskId, initialPosition) {
+        const queueStatusDebug = document.getElementById('queue-status-debug');
+        
+        if (queueStatusDebug) {
+            if (initialPosition > 0) {
+                queueStatusDebug.textContent = `(Faltan ${initialPosition} turnos)`;
             } else {
-                showMessage(errorMessage, result.message || 'Error desconocido al generar imágenes.');
-                showInitialMessage();
-                updateFooterSaveMessage(false);
-                if (clearResultsButton) clearResultsButton.style.display = 'none';
-                return false;
+                queueStatusDebug.textContent = `(Es tu turno...)`;
             }
-        } catch (error) {
-            showMessage(errorMessage, 'Error de conexión con el servidor. Inténtalo de nuevo.');
-            showInitialMessage();
-            updateFooterSaveMessage(false);
-            if (clearResultsButton) clearResultsButton.style.display = 'none';
-            return false;
         }
+
+        const intervalId = setInterval(async () => {
+            try {
+                const response = await fetch(`/check_task/${taskId}`);
+                if (!response.ok) throw new Error('La respuesta del servidor no fue OK');
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    clearInterval(intervalId);
+                    if (loadingSpinner) loadingSpinner.style.display = 'none';
+                    if (queueStatusDebug) queueStatusDebug.textContent = '';
+                    enableAllButtons();
+                    renderGeneratedImages(result.images);
+                    showMessage(successMessage, `🎉 ¡Tus imágenes están listas!`, 'success');
+
+                } else if (result.status === 'error') {
+                    clearInterval(intervalId);
+                    if (loadingSpinner) loadingSpinner.style.display = 'none';
+                    if (queueStatusDebug) queueStatusDebug.textContent = '';
+                    enableAllButtons();
+                    showMessage(errorMessage, result.message);
+                    showInitialMessage();
+
+                } else if (result.status === 'processing') {
+                    if (queueStatusDebug && typeof result.position === 'number') {
+                        if (result.position > 0) {
+                            queueStatusDebug.textContent = `(Faltan ${result.position} turnos)`;
+                        } else if (result.position === 0) {
+                            queueStatusDebug.textContent = `(¡Es tu turno! Procesando...)`;
+                        } else {
+                            // position es -1, la tarea ya fue recogida por el worker.
+                            queueStatusDebug.textContent = `(Procesando tu creación...)`;
+                        }
+                    }
+                }
+            } catch (error) {
+                clearInterval(intervalId);
+                if (loadingSpinner) loadingSpinner.style.display = 'none';
+                if (queueStatusDebug) queueStatusDebug.textContent = '';
+                enableAllButtons();
+                showMessage(errorMessage, 'Error de conexión al verificar el resultado.');
+                showInitialMessage();
+            }
+        }, 3000);
     }
 
     generateButton.addEventListener('click', async function(event) {
@@ -450,24 +444,45 @@ document.addEventListener('DOMContentLoaded', function() {
         const num_images = numImagesSlider ? numImagesSlider.value : 4; 
         const seed = seedInput ? seedInput.value : -1;
         const aspect_ratio = aspectRatioSelect ? aspectRatioSelect.value : '1:1';
-        // CAMBIO CLAVE: Usar getActiveModelName() en lugar de radios
         const model_name_display = getActiveModelName();
         const save_images = saveImagesCheckbox ? saveImagesCheckbox.checked : false;
 
         if (!prompt.trim()) {
             showMessage(errorMessage, "⚠️ Por favor, escribe una descripción.");
             if (loadingSpinner) loadingSpinner.style.display = 'none';
-            showInitialMessage();
             return;
         }
 
         disableAllButtons();
         try {
-            await performGenerate(prompt, num_images, seed, aspect_ratio, model_name_display, save_images, currentReferenceImages);
-        } finally {
-            // Ocultar el spinner al finalizar
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: prompt,
+                    num_images: num_images,
+                    seed: seed,
+                    aspect_ratio: aspect_ratio,
+                    model_name_display: model_name_display,
+                    save_images: save_images,
+                    reference_images: currentReferenceImages
+                }),
+            });
+
+            const result = await response.json();
+
+            if (response.status === 202 && result.status === 'processing') {
+                showMessage(successMessage, '✨ ¡Pinceles listos! Tu obra de arte está en camino...', 'success');
+                // Ahora pasamos el ID y la posición inicial a la función de sondeo
+                pollTaskStatus(result.task_id, result.position);
+            } else {
+                throw new Error(result.message || 'Error al enviar la solicitud.');
+            }
+        } catch (error) {
             if (loadingSpinner) loadingSpinner.style.display = 'none';
             enableAllButtons();
+            showMessage(errorMessage, error.message);
+            showInitialMessage();
         }
     });
 

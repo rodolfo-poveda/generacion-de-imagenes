@@ -1,25 +1,27 @@
-# Dockerfile actualizado
-FROM python:3.12-slim 
+# Dockerfile
 
-# Instala dependencias del sistema para PIL y otras libs (solo lo esencial para slim)
+# 1. Usa una imagen oficial y ligera de Python como base
+FROM python:3.12-slim
+
+# 2. Instala dependencias del sistema operativo necesarias para Pillow (PIL)
 RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     zlib1g-dev \
+    --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
+# 3. Establece el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# Copia e instala dependencias Python
+# 4. Copia el archivo de requerimientos y los instala
+# Se hace en un paso separado para aprovechar el caché de capas de Docker
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia el resto del código
+# 5. Copia todo el resto del código de tu aplicación
 COPY . .
 
-# Variables de entorno (tu Flask app)
-ENV FLASK_APP=app.py
-
+# 6. Expone el puerto que usará Gunicorn
 EXPOSE 5000
 
-# Tu CMD de Gunicorn: Perfecto para prod (ajusta workers si tu VPS tiene más cores)
-CMD ["gunicorn", "--workers", "4", "--threads", "12", "--worker-class", "gthread", "--bind", "0.0.0.0:5000", "--timeout", "180", "--max-requests", "1000", "app:app"]
+# NOTA: No hay CMD aquí. El comando se especificará en docker-compose.yml
