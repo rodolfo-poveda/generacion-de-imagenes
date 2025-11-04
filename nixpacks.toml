@@ -1,8 +1,8 @@
-# nixpacks.toml
+# nixpacks.toml (VERSIÓN OPTIMIZADA PARA 1 vCPU)
 
 [phases.setup]
 nixPkgs = ["python3", "gcc", "libjpeg", "zlib", "redis"]
 
 [start]
-# Cambiamos a --worker-class gthread y especificamos el número de hilos.
-cmd = ". /opt/venv/bin/activate && redis-server --daemonize yes && celery -A celery_worker.celery worker --loglevel=info & gunicorn --bind 0.0.0.0:5000 --workers 4 --threads 10 --worker-class gthread --timeout 120 app:app"
+# Comandos ajustados para un servidor con 1 núcleo de CPU.
+cmd = ". /opt/venv/bin/activate && redis-server --daemonize yes && celery -A celery_worker.celery worker --loglevel=info -c 2 & gunicorn --bind 0.0.0.0:5000 --workers 2 --threads 4 --worker-class gthread --timeout 120 app:app"
